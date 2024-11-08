@@ -11,7 +11,9 @@ SVDQuant is a post-training quantization technique for 4-bit weights and activat
 Muyang Li, Yujun Lin, Zhekai Zhang, Tianle Cai, Xiuyu Li, Junxian Guo, Enze Xie, Chenlin Meng, Jun-Yan Zhu, and Song Han <br>
 *MIT, NVIDIA, CMU, Princeton, UC Berkeley, SJTU, and Pika Labs* <br>
 
-## Overview
+![teaser](./assets/demo.gif)
+
+## Method
 
 #### Quantization Method -- SVDQuant
 
@@ -25,13 +27,6 @@ Muyang Li, Yujun Lin, Zhekai Zhang, Tianle Cai, Xiuyu Li, Junxian Guo, Enze Xie,
 ## Performance
 
 ![efficiency](./assets/efficiency.jpg)SVDQuant reduces the model size of the 12B FLUX.1 by 3.6×. Additionally, Nunchaku, further cuts memory usage of the 16-bit model by 3.5× and delivers 3.0× speedups over the NF4 W4A16 baseline on both the desktop and laptop NVIDIA RTX 4090 GPUs. Remarkably, on laptop 4090, it achieves in total 10.1× speedup by eliminating CPU offloading.
-
-<p align="center">
-  <img src="./assets/speed_demo.gif" width="80%"/>
-</p>
-
-
-
 
 ## Installation
 1. Install dependencies:
