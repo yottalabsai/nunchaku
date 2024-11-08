@@ -1,6 +1,6 @@
 # Nunchaku
 
-### Paper | [Project](https://hanlab.mit.edu/projects/svdquant) | [Blog](https://hanlab.mit.edu/blog/svdquant) | [Demo](https://svdquant.mit.edu)
+### [Paper](http://arxiv.org/abs/2411.05007) | [Project](https://hanlab.mit.edu/projects/svdquant) | [Blog](https://hanlab.mit.edu/blog/svdquant) | [Demo](https://svdquant.mit.edu)
 
 - **[Nov 7, 2024]** 🔥 Our latest **W4A4** Diffusion model quantization work [**SVDQuant**](https://hanlab.mit.edu/projects/svdquant) is publicly released! Check [**DeepCompressor**](https://github.com/mit-han-lab/deepcompressor) for the quantization library.
 
@@ -112,7 +112,7 @@ If you find `nunchaku` useful or relevant to your research, please cite our pape
   li2024svdquant,
   title={SVDQuant: Absorbing Outliers by Low-Rank Components for 4-Bit Diffusion Models},
   author={Li*, Muyang and Lin*, Yujun and Zhang*, Zhekai and Cai, Tianle and Li, Xiuyu and Guo, Junxian and Xie, Enze and Meng, Chenlin and Zhu, Jun-Yan and Han, Song},
-  journal={arXiv preprint arXiv:TBD},
+  journal={arXiv preprint arXiv:2411.05007},
   year={2024}
 }
 ```
