@@ -1,4 +1,5 @@
 # Changed from https://github.com/GaParmar/img2img-turbo/blob/main/gradio_sketch2image.py
+import os
 import random
 import tempfile
 import time
@@ -73,6 +74,16 @@ def run(image, prompt: str, prompt_template: str, sketch_guidance: float, seed: 
     if is_unsafe_prompt:
         latency_str += " (Unsafe prompt detected)"
     torch.cuda.empty_cache()
+    if args.count_use:
+        if os.path.exists("use_count.txt"):
+            with open("use_count.txt", "r") as f:
+                count = int(f.read())
+        else:
+            count = 0
+        count += 1
+        print(f"Use count: {count}")
+        with open("use_count.txt", "w") as f:
+            f.write(str(count))
     return result_image, latency_str
 
 

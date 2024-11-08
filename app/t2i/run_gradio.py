@@ -1,5 +1,6 @@
 # Changed from https://huggingface.co/spaces/playgroundai/playground-v2.5/blob/main/app.py
 import argparse
+import os
 import random
 import time
 
@@ -30,6 +31,7 @@ def get_args() -> argparse.Namespace:
     )
     parser.add_argument("--use-qencoder", action="store_true", help="Whether to use 4-bit text encoder")
     parser.add_argument("--no-safety-checker", action="store_true", help="Disable safety checker")
+    parser.add_argument("--count-use", action="store_true", help="Whether to count the number of uses")
     return parser.parse_args()
 
 
@@ -124,6 +126,18 @@ def generate(
         for i in range(len(latency_strs)):
             latency_strs[i] += " (Unsafe prompt detected)"
     torch.cuda.empty_cache()
+
+    if args.count_use:
+        if os.path.exists("use_count.txt"):
+            with open("use_count.txt", "r") as f:
+                count = int(f.read())
+        else:
+            count = 0
+        count += 1
+        print(f"Use count: {count}")
+        with open("use_count.txt", "w") as f:
+            f.write(str(count))
+
     return *images, *latency_strs
 
 
