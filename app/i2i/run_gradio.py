@@ -13,6 +13,7 @@ from flux_pix2pix_pipeline import FluxPix2pixTurboPipeline
 from nunchaku.models.safety_checker import SafetyChecker
 from utils import get_args
 from vars import DEFAULT_SKETCH_GUIDANCE, DEFAULT_STYLE_NAME, MAX_SEED, STYLES, STYLE_NAMES
+import numpy as np
 
 blank_image = Image.new("RGB", (1024, 1024), (255, 255, 255))
 
@@ -51,6 +52,11 @@ def save_image(img):
 
 
 def run(image, prompt: str, prompt_template: str, sketch_guidance: float, seed: int) -> tuple[Image, str]:
+    image_numpy = np.array(image["composite"].convert("RGB"))
+
+    if prompt.strip() == "" and np.sum(image_numpy != 255) <= 100:
+        return image["composite"], "Please input the prompt or draw something."
+
     is_unsafe_prompt = False
     if not safety_checker(prompt):
         is_unsafe_prompt = True
