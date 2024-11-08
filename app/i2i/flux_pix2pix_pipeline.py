@@ -3,11 +3,13 @@ from typing import Any, Callable, Optional, Union
 
 import torch
 import torchvision.transforms.functional as F
+import torchvision.utils
 from PIL import Image
 from diffusers.pipelines.flux.pipeline_flux import FluxPipeline, FluxPipelineOutput, FluxTransformer2DModel
 from einops import rearrange
 from huggingface_hub import hf_hub_download
 from peft.tuners import lora
+from torch import nn
 
 from nunchaku.models.flux import inject_pipeline, load_quantized_model
 from nunchaku.pipelines.flux import quantize_t5
@@ -134,6 +136,21 @@ class FluxPix2pixTurboPipeline(FluxPipeline):
             image = image.resize((width, height), Image.LANCZOS)
         image_t = F.to_tensor(image) < 0.5
         image_t = image_t.unsqueeze(0).to(self.dtype).to(device)
+
+        kernel_size = 4
+        if hasattr(self, "erosion_kernel"):
+            erosion_kernel = self.erosion_kernel
+        else:
+            erosion_kernel = torch.ones(1, 1, kernel_size, kernel_size, dtype=self.dtype, device=device)
+            self.erosion_kernel = erosion_kernel
+
+        torchvision.utils.save_image(image_t[0], "before.png")
+        image_t = (
+            nn.functional.conv2d(image_t[:, :1], erosion_kernel, padding=kernel_size // 2) > kernel_size**2 - 0.1
+        )
+        image_t = torch.concat([image_t, image_t, image_t], dim=1).to(self.dtype)
+        torchvision.utils.save_image(image_t[0], "after.png")
+
         image_t = (image_t - 0.5) * 2
 
         # 4. Prepare latent variables

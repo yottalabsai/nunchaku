@@ -117,7 +117,7 @@ with gr.Blocks(css_paths="assets/style.css", title=f"SVDQuant Sketch-to-Image De
                     transforms=[],
                     canvas_size=(1024, 1024),
                     scale=1,
-                    brush=gr.Brush(default_size=1, colors=["#000000"], color_mode="fixed"),
+                    brush=gr.Brush(default_size=3, colors=["#000000"], color_mode="fixed"),
                     format="png",
                     layers=False,
                 )
