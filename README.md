@@ -91,7 +91,7 @@ python run_gradio.py
 ### Sketch-to-Image
 
 ```shell
-cd app/t2i
+cd app/i2i
 python run_gradio.py
 ```
 
