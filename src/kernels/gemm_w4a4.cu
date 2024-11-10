@@ -7,7 +7,12 @@
 #include "dispatch_utils.h"
 
 #pragma nv_diag_suppress 177
+
+#ifdef _MSC_VER
+#define ALWAYSINLINE [[msvc::forceinline]]
+#else
 #define ALWAYSINLINE __attribute__((always_inline))
+#endif
 
 // #define ENABLE_NAN_CHECK 1
 #if ENABLE_NAN_CHECK
@@ -196,12 +201,12 @@ public:
                 : 
                 "=f"(psum.data[0]), "=f"(psum.data[1]), "=f"(psum.data[2]), "=f"(psum.data[3])
                 : 
-                "r"(*reinterpret_cast<uint *>(&a.data[0])), 
-                "r"(*reinterpret_cast<uint *>(&a.data[1])), 
-                "r"(*reinterpret_cast<uint *>(&a.data[2])), 
-                "r"(*reinterpret_cast<uint *>(&a.data[3])),
-                "r"(*reinterpret_cast<uint *>(&b.data[0])), 
-                "r"(*reinterpret_cast<uint *>(&b.data[1])),
+                "r"(*reinterpret_cast<unsigned int *>(&a.data[0])), 
+                "r"(*reinterpret_cast<unsigned int *>(&a.data[1])), 
+                "r"(*reinterpret_cast<unsigned int *>(&a.data[2])), 
+                "r"(*reinterpret_cast<unsigned int *>(&a.data[3])),
+                "r"(*reinterpret_cast<unsigned int *>(&b.data[0])), 
+                "r"(*reinterpret_cast<unsigned int *>(&b.data[1])),
 
                 // "r"(0), "r"(0), "r"(0), "r"(0)
                 "f"(psum.data[0]), "f"(psum.data[1]), "f"(psum.data[2]), "f"(psum.data[3])
@@ -215,12 +220,12 @@ public:
                 : 
                 "=f"(psum.data[4]), "=f"(psum.data[5]), "=f"(psum.data[6]), "=f"(psum.data[7])
                 : 
-                "r"(*reinterpret_cast<uint *>(&a.data[0])), 
-                "r"(*reinterpret_cast<uint *>(&a.data[1])), 
-                "r"(*reinterpret_cast<uint *>(&a.data[2])), 
-                "r"(*reinterpret_cast<uint *>(&a.data[3])),
-                "r"(*reinterpret_cast<uint *>(&b.data[2])), 
-                "r"(*reinterpret_cast<uint *>(&b.data[3])),
+                "r"(*reinterpret_cast<unsigned int *>(&a.data[0])), 
+                "r"(*reinterpret_cast<unsigned int *>(&a.data[1])), 
+                "r"(*reinterpret_cast<unsigned int *>(&a.data[2])), 
+                "r"(*reinterpret_cast<unsigned int *>(&a.data[3])),
+                "r"(*reinterpret_cast<unsigned int *>(&b.data[2])), 
+                "r"(*reinterpret_cast<unsigned int *>(&b.data[3])),
                 // "r"(0), "r"(0), "r"(0), "r"(0)
                 "f"(psum.data[4]), "f"(psum.data[5]), "f"(psum.data[6]), "f"(psum.data[7])
             );
@@ -236,12 +241,12 @@ public:
                 : 
                 "=f"(psum.data[0]), "=f"(psum.data[1]), "=f"(psum.data[2]), "=f"(psum.data[3])
                 : 
-                "r"(*reinterpret_cast<uint *>(&a.data[0])), 
-                "r"(*reinterpret_cast<uint *>(&a.data[1])), 
-                "r"(*reinterpret_cast<uint *>(&a.data[2])), 
-                "r"(*reinterpret_cast<uint *>(&a.data[3])),
-                "r"(*reinterpret_cast<uint *>(&b.data[0])), 
-                "r"(*reinterpret_cast<uint *>(&b.data[1])),
+                "r"(*reinterpret_cast<unsigned int *>(&a.data[0])), 
+                "r"(*reinterpret_cast<unsigned int *>(&a.data[1])), 
+                "r"(*reinterpret_cast<unsigned int *>(&a.data[2])), 
+                "r"(*reinterpret_cast<unsigned int *>(&a.data[3])),
+                "r"(*reinterpret_cast<unsigned int *>(&b.data[0])), 
+                "r"(*reinterpret_cast<unsigned int *>(&b.data[1])),
 
                 // "r"(0), "r"(0), "r"(0), "r"(0)
                 "f"(psum.data[0]), "f"(psum.data[1]), "f"(psum.data[2]), "f"(psum.data[3])
@@ -255,12 +260,12 @@ public:
                 : 
                 "=f"(psum.data[4]), "=f"(psum.data[5]), "=f"(psum.data[6]), "=f"(psum.data[7])
                 : 
-                "r"(*reinterpret_cast<uint *>(&a.data[0])), 
-                "r"(*reinterpret_cast<uint *>(&a.data[1])), 
-                "r"(*reinterpret_cast<uint *>(&a.data[2])), 
-                "r"(*reinterpret_cast<uint *>(&a.data[3])),
-                "r"(*reinterpret_cast<uint *>(&b.data[2])), 
-                "r"(*reinterpret_cast<uint *>(&b.data[3])),
+                "r"(*reinterpret_cast<unsigned int *>(&a.data[0])), 
+                "r"(*reinterpret_cast<unsigned int *>(&a.data[1])), 
+                "r"(*reinterpret_cast<unsigned int *>(&a.data[2])), 
+                "r"(*reinterpret_cast<unsigned int *>(&a.data[3])),
+                "r"(*reinterpret_cast<unsigned int *>(&b.data[2])), 
+                "r"(*reinterpret_cast<unsigned int *>(&b.data[3])),
                 // "r"(0), "r"(0), "r"(0), "r"(0)
                 "f"(psum.data[4]), "f"(psum.data[5]), "f"(psum.data[6]), "f"(psum.data[7])
             );
