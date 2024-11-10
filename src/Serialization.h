@@ -29,7 +29,7 @@ public:
 
 class SafeTensors : public TensorsProvider, public std::enable_shared_from_this<SafeTensors> {
 public:
-    SafeTensors(std::string_view filename);
+    SafeTensors(const std::string &filename);
     ~SafeTensors();
 
     virtual bool contains(const std::string &key) const override { 
@@ -41,7 +41,10 @@ private:
     void parseHeader();
 
 private:
-    class mmap_file;
+    class MMapImpl;
+    class MMapImplMio;
+    class MMapImplPrivate;
+
     struct TensorInfo {
         TensorShape shape;
         Tensor::ScalarType type;
@@ -50,5 +53,5 @@ private:
         std::weak_ptr<BufferMMap> buffer;
     };
     std::map<std::string, TensorInfo> tensors;
-    std::unique_ptr<mmap_file> mapped;
+    std::unique_ptr<MMapImpl> mapped;
 };
