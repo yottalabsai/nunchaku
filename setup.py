@@ -6,7 +6,6 @@ from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 class CustomBuildExtension(BuildExtension):
     def build_extensions(self):
         for ext in self.extensions:
-            print(ext.extra_compile_args)
             if not "cxx" in ext.extra_compile_args:
                 ext.extra_compile_args["cxx"] = []
             if self.compiler.compiler_type == "msvc":
