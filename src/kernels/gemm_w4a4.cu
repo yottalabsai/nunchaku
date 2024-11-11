@@ -605,7 +605,8 @@ public:
     
 
     struct EpilogueDefault {
-        struct Arguments {};
+        // workaround for layout mismatch between host and device code
+        struct Arguments { size_t unused; };
 
         __device__ __forceinline__
         void operator()(const BlockInfo binfo, fpsum_warp fpsum, half_t *out, int M, int N, int K, Arguments args) {
@@ -617,7 +618,7 @@ public:
     };
 
     struct EpilogueNop {
-        struct Arguments {};
+        struct Arguments { size_t unused; };
 
         __device__ __forceinline__
         void operator()(const BlockInfo binfo, fpsum_warp fpsum, half_t *out, int M, int N, int K, Arguments args) {
@@ -1664,7 +1665,7 @@ public:
     };
 
     struct EpilogueGelu {
-        struct Arguments {};
+        struct Arguments { size_t unused; };
 
         // static constexpr float SHIFT_VALUE = 0.171875f;
 
@@ -2417,7 +2418,7 @@ public:
     
 
     struct EpilogueGLU {
-        struct Arguments {};
+        struct Arguments { size_t unused; };
 
         __device__ __forceinline__
         void operator()(const BlockInfo binfo, fpsum_warp fpsum, half_t *out, int M, int N, int K, Arguments args) {
@@ -2431,7 +2432,7 @@ public:
     };
 
     struct EpilogueSilu {
-        struct Arguments {};
+        struct Arguments { size_t unused; };
 
         __device__ __forceinline__
         void operator()(const BlockInfo binfo, fpsum_warp fpsum, half_t *out, int M, int N, int K, Arguments args) {
@@ -2723,7 +2724,7 @@ void gemm_w4a4(
         }
 
         dispatchBool(act_unsigned, [&]<bool ACT_UNSIGNED>() {
-            // test_sizeof<Epilogue::Arguments>();
+            // test_sizeof<typename Epilogue::Arguments>();
             // std::apply([](auto ...args) {
             //     (test_sizeof<decltype(args)>(), ...);
             // }, args);
