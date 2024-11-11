@@ -1,7 +1,7 @@
 #include "FluxModel.h"
 #include "kernels/misc_kernels.h"
-#include "kernels/flash_attn/flash_api.h"
 #include "kernels/gemm_batched.h"
+#include "flash_api.h"
 #include "activation.h"
 
 #include <nvtx3/nvToolsExt.h>
