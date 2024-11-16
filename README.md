@@ -121,6 +121,7 @@ Please refer to [app/t2i/README.md](app/t2i/README.md) for instructions on repro
 - [ ] Comfy UI node
 - [ ] Customized LoRA conversion instructions
 - [ ] Customized model quantization instructions
+- [ ] Modularization
 - [ ] ControlNet and IP-Adapter integration
 - [ ] Mochi and CogVideoX support
 - [ ] Metal backend
