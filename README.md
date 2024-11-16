@@ -117,6 +117,7 @@ Please refer to [app/t2i/README.md](app/t2i/README.md) for instructions on repro
 
 ## Roadmap
 
+- [ ] Easy installation
 - [ ] Comfy UI node
 - [ ] Customized LoRA conversion instructions
 - [ ] Customized model quantization instructions
