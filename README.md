@@ -1,5 +1,7 @@
 # Nunchaku
 
+Nunchaku is an inference engine designed for 4-bit diffusion models, as demonstrated in our paper [SVDQuant](http://arxiv.org/abs/2411.05007). Please check [DeepCompressor](https://github.com/mit-han-lab/deepcompressor) for the quantization library.
+
 ### [Paper](http://arxiv.org/abs/2411.05007) | [Project](https://hanlab.mit.edu/projects/svdquant) | [Blog](https://hanlab.mit.edu/blog/svdquant) | [Demo](https://svdquant.mit.edu)
 
 - **[Nov 7, 2024]** 🔥 Our latest **W4A4** Diffusion model quantization work [**SVDQuant**](https://hanlab.mit.edu/projects/svdquant) is publicly released! Check [**DeepCompressor**](https://github.com/mit-han-lab/deepcompressor) for the quantization library.
@@ -32,7 +34,11 @@ SVDQuant is a post-training quantization technique for 4-bit weights and activat
 
 ## Installation
 
-**Note**: We currently support only NVIDIA GPUs with architectures sm_86 (Ampere: RTX 3090, A6000), sm_89 (Ada: RTX 4090), and sm_80 (A100). See [this issue](https://github.com/mit-han-lab/nunchaku/issues/1) for more details.
+**Note**:
+
+*  For Windows user, please refer to [this issue](https://github.com/mit-han-lab/nunchaku/issues/6) for the instruction.
+
+* We currently support only NVIDIA GPUs with architectures sm_86 (Ampere: RTX 3090, A6000), sm_89 (Ada: RTX 4090), and sm_80 (A100). See [this issue](https://github.com/mit-han-lab/nunchaku/issues/1) for more details.
 
 
 1. Install dependencies:
@@ -108,6 +114,15 @@ python run_gradio.py
 ## Benchmark
 
 Please refer to [app/t2i/README.md](app/t2i/README.md) for instructions on reproducing our paper's quality results and benchmarking inference latency.
+
+## Roadmap
+
+- [ ] Comfy UI node
+- [ ] Customized LoRA conversion instructions
+- [ ] Customized model quantization instructions
+- [ ] ControlNet and IP-Adapter integration
+- [ ] Mochi and CogVideoX support
+- [ ] Metal backend
 
 ## Citation
 
