@@ -48,7 +48,7 @@ class DCI(datasets.GeneratorBasedBuilder):
     VERSION = datasets.Version("0.0.0")
 
     BUILDER_CONFIG_CLASS = DCIConfig
-    BUILDER_CONFIGS = [DCIConfig(name="sDCI_full", version=VERSION, description="sDCI full prompt set")]
+    BUILDER_CONFIGS = [DCIConfig(name="sDCI", version=VERSION, description="sDCI full prompt set")]
     DEFAULT_CONFIG_NAME = "sDCI"
 
     def _info(self):
