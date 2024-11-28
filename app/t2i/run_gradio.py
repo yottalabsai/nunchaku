@@ -5,7 +5,6 @@ import random
 import time
 
 import GPUtil
-import gradio as gr
 import spaces
 import torch
 from peft.tuners import lora
@@ -13,6 +12,9 @@ from peft.tuners import lora
 from nunchaku.models.safety_checker import SafetyChecker
 from utils import get_pipeline
 from vars import DEFAULT_HEIGHT, DEFAULT_WIDTH, EXAMPLES, MAX_SEED, PROMPT_TEMPLATES, SVDQ_LORA_PATHS
+
+# import gradio last to avoid conflicts with other imports
+import gradio as gr
 
 
 def get_args() -> argparse.Namespace:

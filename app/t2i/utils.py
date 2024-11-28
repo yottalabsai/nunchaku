@@ -29,7 +29,7 @@ def get_pipeline(
             pipeline = nunchaku_flux.from_pretrained(
                 "black-forest-labs/FLUX.1-schnell",
                 torch_dtype=torch.bfloat16,
-                qmodel_path="mit-han-lab/svdquant-models/svdq-int4-flux.1-schnell.safetensors",
+                qmodel_path="mit-han-lab/svdq-int4-flux.1-schnell",
                 qencoder_path="mit-han-lab/svdquant-models/svdq-w4a16-t5.pt" if use_qencoder else None,
                 qmodel_device=device,
             )
@@ -41,7 +41,7 @@ def get_pipeline(
             pipeline = nunchaku_flux.from_pretrained(
                 "black-forest-labs/FLUX.1-dev",
                 torch_dtype=torch.bfloat16,
-                qmodel_path="mit-han-lab/svdquant-models/svdq-int4-flux.1-dev.safetensors",
+                qmodel_path="mit-han-lab/svdq-int4-flux.1-dev",
                 qencoder_path="mit-han-lab/svdquant-models/svdq-w4a16-t5.pt" if use_qencoder else None,
                 qmodel_device=device,
             )

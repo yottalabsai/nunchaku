@@ -4,11 +4,11 @@ from typing import Any, Callable, Optional, Union
 import torch
 import torchvision.transforms.functional as F
 import torchvision.utils
-from PIL import Image
 from diffusers.pipelines.flux.pipeline_flux import FluxPipeline, FluxPipelineOutput, FluxTransformer2DModel
 from einops import rearrange
-from huggingface_hub import hf_hub_download
+from huggingface_hub import hf_hub_download, snapshot_download
 from peft.tuners import lora
+from PIL import Image
 from torch import nn
 
 from nunchaku.models.flux import inject_pipeline, load_quantized_model
@@ -145,9 +145,7 @@ class FluxPix2pixTurboPipeline(FluxPipeline):
             self.erosion_kernel = erosion_kernel
 
         torchvision.utils.save_image(image_t[0], "before.png")
-        image_t = (
-            nn.functional.conv2d(image_t[:, :1], erosion_kernel, padding=kernel_size // 2) > kernel_size**2 - 0.1
-        )
+        image_t = nn.functional.conv2d(image_t[:, :1], erosion_kernel, padding=kernel_size // 2) > kernel_size**2 - 0.1
         image_t = torch.concat([image_t, image_t, image_t], dim=1).to(self.dtype)
         torchvision.utils.save_image(image_t[0], "after.png")
 
@@ -219,6 +217,8 @@ class FluxPix2pixTurboPipeline(FluxPipeline):
     def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], **kwargs):
         qmodel_device = kwargs.pop("qmodel_device", "cuda:0")
         qmodel_device = torch.device(qmodel_device)
+        if qmodel_device.type != "cuda":
+            raise ValueError(f"qmodel_device = {qmodel_device} is not a CUDA device")
 
         qmodel_path = kwargs.pop("qmodel_path", None)
         qencoder_path = kwargs.pop("qencoder_path", None)
@@ -229,11 +229,12 @@ class FluxPix2pixTurboPipeline(FluxPipeline):
         if qmodel_path is not None:
             assert isinstance(qmodel_path, str)
             if not os.path.exists(qmodel_path):
-                hf_repo_id = os.path.dirname(qmodel_path)
-                filename = os.path.basename(qmodel_path)
-                qmodel_path = hf_hub_download(repo_id=hf_repo_id, filename=filename)
-            m = load_quantized_model(qmodel_path, 0 if qmodel_device.index is None else qmodel_device.index)
-            inject_pipeline(pipeline, m)
+                qmodel_path = snapshot_download(qmodel_path)
+            m = load_quantized_model(
+                os.path.join(qmodel_path, "transformer_blocks.safetensors"),
+                0 if qmodel_device.index is None else qmodel_device.index,
+            )
+            inject_pipeline(pipeline, m, qmodel_device)
             pipeline.precision = "int4"
 
         if qencoder_path is not None:

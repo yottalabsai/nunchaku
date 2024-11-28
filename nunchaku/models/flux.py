@@ -14,10 +14,11 @@ SVD_RANK = 32
 
 
 class NunchakuFluxModel(nn.Module):
-    def __init__(self, m: QuantizedFluxModel):
+    def __init__(self, m: QuantizedFluxModel, device: torch.device):
         super().__init__()
         self.m = m
         self.dtype = torch.bfloat16
+        self.device = device
 
     def forward(
         self,
@@ -33,10 +34,12 @@ class NunchakuFluxModel(nn.Module):
         img_tokens = hidden_states.shape[1]
 
         original_dtype = hidden_states.dtype
+        original_device = hidden_states.device
 
-        hidden_states = hidden_states.to(self.dtype)
-        encoder_hidden_states = encoder_hidden_states.to(self.dtype)
-        temb = temb.to(self.dtype)
+        hidden_states = hidden_states.to(self.dtype).to(self.device)
+        encoder_hidden_states = encoder_hidden_states.to(self.dtype).to(self.device)
+        temb = temb.to(self.dtype).to(self.device)
+        image_rotary_emb = image_rotary_emb.to(self.device)
 
         assert image_rotary_emb.ndim == 6
         assert image_rotary_emb.shape[0] == 1
@@ -52,7 +55,7 @@ class NunchakuFluxModel(nn.Module):
             hidden_states, encoder_hidden_states, temb, rotary_emb_img, rotary_emb_txt, rotary_emb_single
         )
 
-        hidden_states = hidden_states.to(original_dtype)
+        hidden_states = hidden_states.to(original_dtype).to(original_device)
 
         encoder_hidden_states = hidden_states[:, :txt_tokens, ...]
         hidden_states = hidden_states[:, txt_tokens:, ...]
@@ -110,11 +113,11 @@ def load_quantized_model(path: str, device: str | torch.device) -> QuantizedFlux
     return m
 
 
-def inject_pipeline(pipe: FluxPipeline, m: QuantizedFluxModel) -> FluxPipeline:
+def inject_pipeline(pipe: FluxPipeline, m: QuantizedFluxModel, device: torch.device) -> FluxPipeline:
     net: FluxTransformer2DModel = pipe.transformer
     net.pos_embed = EmbedND(dim=net.inner_dim, theta=10000, axes_dim=[16, 56, 56])
 
-    net.transformer_blocks = torch.nn.ModuleList([NunchakuFluxModel(m)])
+    net.transformer_blocks = torch.nn.ModuleList([NunchakuFluxModel(m, device)])
     net.single_transformer_blocks = torch.nn.ModuleList([])
 
     def update_params(self: FluxTransformer2DModel, path: str):

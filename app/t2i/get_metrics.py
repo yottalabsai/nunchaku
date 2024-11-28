@@ -31,7 +31,9 @@ def main():
     results = {}
     dataset_names = sorted(os.listdir(image_root1))
     for dataset_name in dataset_names:
-        print("##Results for dataset:", dataset_name)
+        if image_root2 is not None and dataset_name not in os.listdir(image_root2):
+            continue
+        print("Results for dataset:", dataset_name)
         results[dataset_name] = {}
         dataset = get_dataset(name=dataset_name, return_gt=True)
         fid = compute_fid(ref_dirpath_or_dataset=dataset, gen_dirpath=os.path.join(image_root1, dataset_name))

@@ -60,9 +60,9 @@ SVDQuant is a post-training quantization technique for 4-bit weights and activat
 	Then build the package from source:
 	```shell
 	git clone https://github.com/mit-han-lab/nunchaku.git
-    cd nunchaku
-    git submodule init
-    git submodule update
+	cd nunchaku
+	git submodule init
+	git submodule update
 	pip install -e .
 	```
 
@@ -78,7 +78,7 @@ from nunchaku.pipelines import flux as nunchaku_flux
 pipeline = nunchaku_flux.from_pretrained(
     "black-forest-labs/FLUX.1-schnell",
     torch_dtype=torch.bfloat16,
-    qmodel_path="mit-han-lab/svdquant-models/svdq-int4-flux.1-schnell.safetensors",  # download from Huggingface
+    qmodel_path="mit-han-lab/svdq-int4-flux.1-schnell",  # download from Huggingface
 ).to("cuda")
 image = pipeline("A cat holding a sign that says hello world", num_inference_steps=4, guidance_scale=0).images[0]
 image.save("example.png")

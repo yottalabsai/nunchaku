@@ -5,15 +5,17 @@ import tempfile
 import time
 
 import GPUtil
-import gradio as gr
+import numpy as np
 import torch
 from PIL import Image
 
 from flux_pix2pix_pipeline import FluxPix2pixTurboPipeline
 from nunchaku.models.safety_checker import SafetyChecker
 from utils import get_args
-from vars import DEFAULT_SKETCH_GUIDANCE, DEFAULT_STYLE_NAME, MAX_SEED, STYLES, STYLE_NAMES
-import numpy as np
+from vars import DEFAULT_SKETCH_GUIDANCE, DEFAULT_STYLE_NAME, MAX_SEED, STYLE_NAMES, STYLES
+
+# import gradio last to avoid conflicts with other imports
+import gradio as gr
 
 blank_image = Image.new("RGB", (1024, 1024), (255, 255, 255))
 
@@ -30,7 +32,7 @@ else:
     pipeline = FluxPix2pixTurboPipeline.from_pretrained(
         "black-forest-labs/FLUX.1-schnell",
         torch_dtype=torch.bfloat16,
-        qmodel_path="mit-han-lab/svdquant-models/svdq-int4-flux.1-schnell.safetensors",
+        qmodel_path="mit-han-lab/svdq-int4-flux.1-schnell",
         qencoder_path="mit-han-lab/svdquant-models/svdq-w4a16-t5.pt" if args.use_qencoder else None,
     )
     pipeline = pipeline.to("cuda")

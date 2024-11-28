@@ -1,8 +1,11 @@
 import os
 
 import torch
-from diffusers import FluxPipeline
-from huggingface_hub import hf_hub_download
+from diffusers import __version__
+from diffusers import FluxPipeline, FluxTransformer2DModel
+from huggingface_hub import hf_hub_download, snapshot_download
+from safetensors.torch import load_file
+from torch import nn
 
 from ..models.flux import inject_pipeline, load_quantized_model
 
@@ -45,13 +48,34 @@ def from_pretrained(pretrained_model_name_or_path: str | os.PathLike, **kwargs) 
     qencoder_path = kwargs.pop("qencoder_path", None)
 
     if not os.path.exists(qmodel_path):
-        hf_repo_id = os.path.dirname(qmodel_path)
-        filename = os.path.basename(qmodel_path)
-        qmodel_path = hf_hub_download(repo_id=hf_repo_id, filename=filename)
+        qmodel_path = snapshot_download(qmodel_path)
 
-    pipeline = FluxPipeline.from_pretrained(pretrained_model_name_or_path, **kwargs)
-    m = load_quantized_model(qmodel_path, 0 if qmodel_device.index is None else qmodel_device.index)
-    inject_pipeline(pipeline, m)
+    assert kwargs.pop("transformer", None) is None
+
+    config, unused_kwargs, commit_hash = FluxTransformer2DModel.load_config(
+        pretrained_model_name_or_path,
+        cache_dir=kwargs.get("cache_dir", None),
+        return_unused_kwargs=True,
+        return_commit_hash=True,
+        force_download=kwargs.get("force_download", False),
+        proxies=kwargs.get("proxies", None),
+        local_files_only=kwargs.get("local_files_only", None),
+        token=kwargs.get("token", None),
+        revision=kwargs.get("revision", None),
+        subfolder="transformer",
+        user_agent={"diffusers": __version__, "file_type": "model", "framework": "pytorch"},
+        **kwargs,
+    )
+    transformer: nn.Module = FluxTransformer2DModel.from_config(config).to(kwargs.get("torch_dtype", torch.bfloat16))
+    state_dict = load_file(os.path.join(qmodel_path, "unquantized_layers.safetensors"))
+    transformer.load_state_dict(state_dict, strict=False)
+
+    pipeline = FluxPipeline.from_pretrained(pretrained_model_name_or_path, transformer=transformer, **kwargs)
+    m = load_quantized_model(
+        os.path.join(qmodel_path, "transformer_blocks.safetensors"),
+        0 if qmodel_device.index is None else qmodel_device.index,
+    )
+    inject_pipeline(pipeline, m, qmodel_device)
 
     if qencoder_path is not None:
         assert isinstance(qencoder_path, str)
