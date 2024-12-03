@@ -2,14 +2,16 @@ import os
 from typing import Any, Callable, Optional, Union
 
 import torch
-import torchvision.transforms.functional as F
 import torchvision.utils
+from diffusers import __version__
 from diffusers.pipelines.flux.pipeline_flux import FluxPipeline, FluxPipelineOutput, FluxTransformer2DModel
 from einops import rearrange
 from huggingface_hub import hf_hub_download, snapshot_download
 from peft.tuners import lora
 from PIL import Image
+from safetensors.torch import load_file
 from torch import nn
+from torchvision.transforms import functional as F
 
 from nunchaku.models.flux import inject_pipeline, load_quantized_model
 from nunchaku.pipelines.flux import quantize_t5
@@ -223,19 +225,51 @@ class FluxPix2pixTurboPipeline(FluxPipeline):
         qmodel_path = kwargs.pop("qmodel_path", None)
         qencoder_path = kwargs.pop("qencoder_path", None)
 
-        pipeline = super().from_pretrained(pretrained_model_name_or_path, **kwargs)
-        pipeline.precision = "bf16"
-
-        if qmodel_path is not None:
+        if qmodel_path is None:
+            pipeline = super().from_pretrained(pretrained_model_name_or_path, **kwargs)
+            pipeline.precision = "bf16"
+        else:
+            assert kwargs.pop("transformer", None) is None
             assert isinstance(qmodel_path, str)
             if not os.path.exists(qmodel_path):
                 qmodel_path = snapshot_download(qmodel_path)
+
+            config, unused_kwargs, commit_hash = FluxTransformer2DModel.load_config(
+                pretrained_model_name_or_path,
+                subfolder="transformer",
+                cache_dir=kwargs.get("cache_dir", None),
+                return_unused_kwargs=True,
+                return_commit_hash=True,
+                force_download=kwargs.get("force_download", False),
+                proxies=kwargs.get("proxies", None),
+                local_files_only=kwargs.get("local_files_only", None),
+                token=kwargs.get("token", None),
+                revision=kwargs.get("revision", None),
+                user_agent={"diffusers": __version__, "file_type": "model", "framework": "pytorch"},
+                **kwargs,
+            )
+
+            new_config = {k: v for k, v in config.items()}
+            new_config.update({"num_layers": 0, "num_single_layers": 0})
+
+            transformer: nn.Module = FluxTransformer2DModel.from_config(new_config).to(
+                kwargs.get("torch_dtype", torch.bfloat16)
+            )
+
+            state_dict = load_file(os.path.join(qmodel_path, "unquantized_layers.safetensors"))
+            transformer.load_state_dict(state_dict, strict=False)
+
+            pipeline = super().from_pretrained(pretrained_model_name_or_path, transformer=transformer, **kwargs)
+
             m = load_quantized_model(
                 os.path.join(qmodel_path, "transformer_blocks.safetensors"),
                 0 if qmodel_device.index is None else qmodel_device.index,
             )
             inject_pipeline(pipeline, m, qmodel_device)
             pipeline.precision = "int4"
+
+            transformer.config["num_layers"] = config["num_layers"]
+            transformer.config["num_single_layers"] = config["num_single_layers"]
 
         if qencoder_path is not None:
             assert isinstance(qencoder_path, str)

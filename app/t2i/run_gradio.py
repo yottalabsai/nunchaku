@@ -247,6 +247,8 @@ with gr.Blocks(
         ).then(
             fn=generate_func, inputs=input_args, outputs=[*image_results, *latency_results], api_name=False, queue=False
         )
+    gr.Markdown("MIT Accessibility: https://accessibility.mit.edu/", elem_id="accessibility")
+
 
 if __name__ == "__main__":
     demo.queue(max_size=20).launch(server_name="0.0.0.0", debug=True, share=True)

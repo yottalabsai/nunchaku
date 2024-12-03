@@ -1,8 +1,7 @@
 import os
 
 import torch
-from diffusers import __version__
-from diffusers import FluxPipeline, FluxTransformer2DModel
+from diffusers import __version__, FluxPipeline, FluxTransformer2DModel
 from huggingface_hub import hf_hub_download, snapshot_download
 from safetensors.torch import load_file
 from torch import nn
@@ -54,6 +53,7 @@ def from_pretrained(pretrained_model_name_or_path: str | os.PathLike, **kwargs) 
 
     config, unused_kwargs, commit_hash = FluxTransformer2DModel.load_config(
         pretrained_model_name_or_path,
+        subfolder="transformer",
         cache_dir=kwargs.get("cache_dir", None),
         return_unused_kwargs=True,
         return_commit_hash=True,
@@ -62,11 +62,17 @@ def from_pretrained(pretrained_model_name_or_path: str | os.PathLike, **kwargs) 
         local_files_only=kwargs.get("local_files_only", None),
         token=kwargs.get("token", None),
         revision=kwargs.get("revision", None),
-        subfolder="transformer",
         user_agent={"diffusers": __version__, "file_type": "model", "framework": "pytorch"},
         **kwargs,
     )
-    transformer: nn.Module = FluxTransformer2DModel.from_config(config).to(kwargs.get("torch_dtype", torch.bfloat16))
+
+    new_config = {k: v for k, v in config.items()}
+    new_config.update({"num_layers": 0, "num_single_layers": 0})
+
+    transformer: nn.Module = FluxTransformer2DModel.from_config(new_config).to(
+        kwargs.get("torch_dtype", torch.bfloat16)
+    )
+
     state_dict = load_file(os.path.join(qmodel_path, "unquantized_layers.safetensors"))
     transformer.load_state_dict(state_dict, strict=False)
 
@@ -76,6 +82,9 @@ def from_pretrained(pretrained_model_name_or_path: str | os.PathLike, **kwargs) 
         0 if qmodel_device.index is None else qmodel_device.index,
     )
     inject_pipeline(pipeline, m, qmodel_device)
+
+    transformer.config["num_layers"] = config["num_layers"]
+    transformer.config["num_single_layers"] = config["num_single_layers"]
 
     if qencoder_path is not None:
         assert isinstance(qencoder_path, str)

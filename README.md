@@ -14,7 +14,7 @@ SVDQuant is a post-training quantization technique for 4-bit weights and activat
 *MIT, NVIDIA, CMU, Princeton, UC Berkeley, SJTU, and Pika Labs* <br>
 
 <p align="center">
-  <img src="assets/demo.gif" width="70%"/>
+  <img src="assets/demo.gif" width="100%"/>
 </p>
 
 ## Method

@@ -205,6 +205,8 @@ with gr.Blocks(css_paths="assets/style.css", title=f"SVDQuant Sketch-to-Image De
 
     download_sketch.click(fn=save_image, inputs=canvas, outputs=download_sketch)
     download_result.click(fn=save_image, inputs=result, outputs=download_result)
+    gr.Markdown("MIT Accessibility: https://accessibility.mit.edu/", elem_id="accessibility")
+
 
 if __name__ == "__main__":
     demo.queue().launch(debug=True, share=True)
