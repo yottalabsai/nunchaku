@@ -72,19 +72,23 @@ In [example.py](example.py), we provide a minimal script for running INT4 FLUX.1
 
 ```python
 import torch
+from diffusers import FluxPipeline
 
-from nunchaku.pipelines import flux as nunchaku_flux
+from nunchaku.models.transformer_flux import NunchakuFluxTransformer2dModel
 
-pipeline = nunchaku_flux.from_pretrained(
-    "black-forest-labs/FLUX.1-schnell",
-    torch_dtype=torch.bfloat16,
-    qmodel_path="mit-han-lab/svdq-int4-flux.1-schnell",  # download from Huggingface
+transformer = NunchakuFluxTransformer2dModel.from_pretrained("mit-han-lab/svdq-int4-flux.1-schnell")
+pipeline = FluxPipeline.from_pretrained(
+    "black-forest-labs/FLUX.1-schnell", transformer=transformer, torch_dtype=torch.bfloat16
 ).to("cuda")
 image = pipeline("A cat holding a sign that says hello world", num_inference_steps=4, guidance_scale=0).images[0]
 image.save("example.png")
 ```
 
 Specifically, `nunchaku` shares the same APIs as [diffusers](https://github.com/huggingface/diffusers) and can be used in a similar way. The FLUX.1-dev model can be loaded in the same way by replace all `schnell` with `dev`.
+
+## ComfyUI
+
+Please refer to [comfyui/README.md](comfyui/README.md) for the usage in [ComfyUI](https://github.com/comfyanonymous/ComfyUI).
 
 ## Gradio Demos
 
@@ -118,7 +122,7 @@ Please refer to [app/t2i/README.md](app/t2i/README.md) for instructions on repro
 ## Roadmap
 
 - [ ] Easy installation
-- [ ] Comfy UI node
+- [x] Comfy UI node
 - [ ] Customized LoRA conversion instructions
 - [ ] Customized model quantization instructions
 - [ ] Modularization

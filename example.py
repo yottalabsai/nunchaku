@@ -1,11 +1,11 @@
 import torch
+from diffusers import FluxPipeline
 
-from nunchaku.pipelines import flux as nunchaku_flux
+from nunchaku.models.transformer_flux import NunchakuFluxTransformer2dModel
 
-pipeline = nunchaku_flux.from_pretrained(
-    "black-forest-labs/FLUX.1-schnell",
-    torch_dtype=torch.bfloat16,
-    qmodel_path="mit-han-lab/svdq-int4-flux.1-schnell",  # download from Huggingface
+transformer = NunchakuFluxTransformer2dModel.from_pretrained("mit-han-lab/svdq-int4-flux.1-schnell")
+pipeline = FluxPipeline.from_pretrained(
+    "black-forest-labs/FLUX.1-schnell", transformer=transformer, torch_dtype=torch.bfloat16
 ).to("cuda")
 image = pipeline("A cat holding a sign that says hello world", num_inference_steps=4, guidance_scale=0).images[0]
 image.save("example.png")
