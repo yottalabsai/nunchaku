@@ -20,20 +20,21 @@ pip install -r requirements.txt
   * Place the SVDQuant workflow configurations from [`workflows`](./workflows) into `user/default/workflows`.
   * For example
 
-  ```shell
-  # Clone repositories (skip if already cloned)
-  git clone https://github.com/comfyanonymous/ComfyUI.git
-  git clone https://github.com/mit-han-lab/nunchaku.git
-  cd ComfyUI
-  
-  # Copy workflow configurations
-  mkdir -p user/default/workflows
-  cp ../nunchaku/comfyui/workflows/* user/default/workflows/
-  
-  # Add SVDQuant nodes
-  cd custom_nodes
-  ln -s ../../nunchaku/comfyui svdquant
-  ```
+    ```shell
+    # Clone repositories (skip if already cloned)
+    git clone https://github.com/comfyanonymous/ComfyUI.git
+    git clone https://github.com/mit-han-lab/nunchaku.git
+    cd ComfyUI
+    
+    # Copy workflow configurations
+    mkdir -p user/default/workflows
+    cp ../nunchaku/comfyui/workflows/* user/default/workflows/
+    
+    # Add SVDQuant nodes
+    cd custom_nodes
+    ln -s ../../nunchaku/comfyui svdquant
+    ```
+
 
 2. **Download Required Models**: Follow [this tutorial](https://comfyanonymous.github.io/ComfyUI_examples/flux/) and download the required models into the appropriate directories using the commands below:
 
@@ -55,7 +56,14 @@ pip install -r requirements.txt
 
 * **SVDQuant Flux DiT Loader**: A node for loading the FLUX diffusion model. 
 
-  * `model_path`: Specifies the model location. It can be set to either `mit-han-lab/svdq-int-flux.1-schnell` or `mit-han-lab/svdq-int-flux.1-dev`. The model will automatically download from our Hugging Face repository.
+  * `model_path`: Specifies the model location. If set to `mit-han-lab/svdq-int4-flux.1-schnell` or `mit-han-lab/svdq-int4-flux.1-dev`, the model will be automatically downloaded from our Hugging Face repository. Alternatively, you can manually download the model directory by running the following command:
+
+    ```shell
+    huggingface-cli download mit-han-lab/svdq-int4-flux.1-dev --local-dir models/diffusion_models/svdq-int4-flux.1-dev
+    ```
+
+     After downloading, specify the corresponding folder name as the `model_path`.
+
   * `device_id`: Indicates the GPU ID for running the model.
 
 * **SVDQuant LoRA Loader**: A node for loading LoRA modules for SVDQuant diffusion models.
@@ -70,9 +78,9 @@ pip install -r requirements.txt
     - `text_encoder1`: `t5xxl_fp16.safetensors`
     - `text_encoder2`: `clip_l.safetensors`
   
-  * **`t5_min_length`**: Sets the minimum sequence length for T5 text embeddings. The default in `DualCLIPLoader` is hardcoded to 256, but for better image quality in SVDQuant, use 512 here.
+  * `t5_min_length`: Sets the minimum sequence length for T5 text embeddings. The default in `DualCLIPLoader` is hardcoded to 256, but for better image quality in SVDQuant, use 512 here.
   
-  * **`t5_precision`**: Specifies the precision of the T5 text encoder. Choose `INT4` to use the INT4 text encoder, which reduces GPU memory usage by approximately 15GB. Please install [`deepcompressor`](https://github.com/mit-han-lab/deepcompressor) when using it:
+  * `t5_precision`: Specifies the precision of the T5 text encoder. Choose `INT4` to use the INT4 text encoder, which reduces GPU memory usage by approximately 15GB. Please install [`deepcompressor`](https://github.com/mit-han-lab/deepcompressor) when using it:
   
     ```shell
     git clone https://github.com/mit-han-lab/deepcompressor
@@ -81,4 +89,11 @@ pip install -r requirements.txt
     poetry install
     ```
   
-    
+  
+  * `int4_model`: Specifies the INT4 model location. This option is only used when `t5_precision` is set to `INT4`. By default, the path is `mit-han-lab/svdq-flux.1-t5`, and the model will automatically download from our Hugging Face repository. Alternatively, you can manually download the model directory by running the following command:
+  
+    ```shell
+    huggingface-cli download mit-han-lab/svdq-flux.1-t5 --local-dir models/text_encoders/svdq-flux.1-t5
+    ```
+  
+     After downloading, specify the corresponding folder name as the `int4_model`.

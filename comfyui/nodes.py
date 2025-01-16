@@ -62,6 +62,16 @@ class SVDQuantFluxDiTLoader:
     @classmethod
     def INPUT_TYPES(s):
         model_paths = ["mit-han-lab/svdq-int4-flux.1-schnell", "mit-han-lab/svdq-int4-flux.1-dev"]
+        prefix = "models/diffusion_models"
+        local_folders = os.listdir(prefix)
+        local_folders = sorted(
+            [
+                folder
+                for folder in local_folders
+                if not folder.startswith(".") and os.path.isdir(os.path.join(prefix, folder))
+            ]
+        )
+        model_paths.extend(local_folders)
         ngpus = len(GPUtil.getGPUs())
         return {
             "required": {
@@ -80,6 +90,11 @@ class SVDQuantFluxDiTLoader:
 
     def load_model(self, model_path: str, device_id: int, **kwargs) -> tuple[FluxTransformer2DModel]:
         device = f"cuda:{device_id}"
+        prefix = "models/diffusion_models"
+        if os.path.exists(os.path.join(prefix, model_path)):
+            model_path = os.path.join(prefix, model_path)
+        else:
+            model_path = model_path
         transformer = NunchakuFluxTransformer2dModel.from_pretrained(model_path).to(device)
         dit_config = {
             "image_model": "flux",
@@ -135,6 +150,17 @@ def svdquant_t5_forward(
 class SVDQuantTextEncoderLoader:
     @classmethod
     def INPUT_TYPES(s):
+        model_paths = ["mit-han-lab/svdq-flux.1-t5"]
+        prefix = "models/text_encoders"
+        local_folders = os.listdir(prefix)
+        local_folders = sorted(
+            [
+                folder
+                for folder in local_folders
+                if not folder.startswith(".") and os.path.isdir(os.path.join(prefix, folder))
+            ]
+        )
+        model_paths.extend(local_folders)
         return {
             "required": {
                 "model_type": (["flux"],),
@@ -145,6 +171,7 @@ class SVDQuantTextEncoderLoader:
                     {"default": 512, "min": 256, "max": 1024, "step": 128, "display": "number", "lazy": True},
                 ),
                 "t5_precision": (["BF16", "INT4"],),
+                "int4_model": (model_paths, {"tooltip": "The name of the INT4 model."}),
             }
         }
 
@@ -156,7 +183,13 @@ class SVDQuantTextEncoderLoader:
     TITLE = "SVDQuant Text Encoder Loader"
 
     def load_text_encoder(
-        self, model_type: str, text_encoder1: str, text_encoder2: str, t5_min_length: int, t5_precision: str
+        self,
+        model_type: str,
+        text_encoder1: str,
+        text_encoder2: str,
+        t5_min_length: int,
+        t5_precision: str,
+        int4_model: str,
     ):
         text_encoder_path1 = folder_paths.get_full_path_or_raise("text_encoders", text_encoder1)
         text_encoder_path2 = folder_paths.get_full_path_or_raise("text_encoders", text_encoder2)
@@ -181,7 +214,13 @@ class SVDQuantTextEncoderLoader:
             param = next(transformer.parameters())
             dtype = param.dtype
             device = param.device
-            transformer = NunchakuT5EncoderModel.from_pretrained("mit-han-lab/svdq-flux.1-t5")
+
+            prefix = "models/text_encoders"
+            if os.path.exists(os.path.join(prefix, int4_model)):
+                model_path = os.path.join(prefix, int4_model)
+            else:
+                model_path = int4_model
+            transformer = NunchakuT5EncoderModel.from_pretrained(model_path)
             transformer.forward = types.MethodType(svdquant_t5_forward, transformer)
             clip.cond_stage_model.t5xxl.transformer = (
                 transformer.to(device=device, dtype=dtype) if device.type == "cuda" else transformer
