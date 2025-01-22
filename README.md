@@ -138,12 +138,12 @@ Please refer to [app/t2i/README.md](app/t2i/README.md) for instructions on repro
 If you find `nunchaku` useful or relevant to your research, please cite our paper:
 
 ```bibtex
-@article{
+@inproceedings{
   li2024svdquant,
   title={SVDQuant: Absorbing Outliers by Low-Rank Components for 4-Bit Diffusion Models},
   author={Li*, Muyang and Lin*, Yujun and Zhang*, Zhekai and Cai, Tianle and Li, Xiuyu and Guo, Junxian and Xie, Enze and Meng, Chenlin and Zhu, Jun-Yan and Han, Song},
-  journal={arXiv preprint arXiv:2411.05007},
-  year={2024}
+  booktitle={The Thirteenth International Conference on Learning Representations},
+  year={2025}
 }
 ```
 
