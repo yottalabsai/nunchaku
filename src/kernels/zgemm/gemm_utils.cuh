@@ -2,7 +2,9 @@
 
 #include <cstdint>
 #include "common.h"
-#include "utils.cuh"
+#include "../utils.cuh"
+
+namespace nunchaku::kernels {
 
 static constexpr int clamp(int val, int min, int max) {
     if (val < min) 
@@ -74,25 +76,19 @@ static void store(T *addr, T val) {
     *addr = val;
 }
 
-template<typename T>
 __device__ __forceinline__
-float2 half22float2(T val);
-
-template<>
-__device__ __forceinline__
-float2 half22float2<half2>(half2 val) {
+static float2 half22float2(half2 val) {
     return __half22float2(val);
 }
 
-template<>
 __device__ __forceinline__
-float2 half22float2<__nv_bfloat162>(__nv_bfloat162 val) {
+static float2 half22float2(__nv_bfloat162 val) {
     return __bfloat1622float2(val);
 }
 
 template<typename T>
 __device__ __forceinline__
-T float22half2(float2 val);
+static T float22half2(float2 val) = delete;
 
 template<>
 __device__ __forceinline__
@@ -108,7 +104,7 @@ __nv_bfloat162 float22half2<__nv_bfloat162>(float2 val) {
 
 template<typename T>
 __device__ __forceinline__
-void unused_var(T &val, bool alwaysfalse) {
+static void unused_var(T &val, bool alwaysfalse) {
     volatile T *ptr = nullptr;
     if (alwaysfalse) {
         *ptr = val;
@@ -218,7 +214,7 @@ static float cuda_sigmoidf (float a)
 template<typename T>
 __device__ __forceinline__ 
 static T gelu_half2(T x) {
-    float2 xf  = half22float2<T>(x);
+    float2 xf  = half22float2(x);
     float2 x3f = xf * xf * xf;
     float t1 = 0.5f + 0.5f * cuda_tanhf(0.79788456f * (xf.x + (0.044715f * x3f.x)));
     float t2 = 0.5f + 0.5f * cuda_tanhf(0.79788456f * (xf.y + (0.044715f * x3f.y)));
@@ -243,6 +239,25 @@ static T silu(const T &x) {
 }
 
 __device__ __forceinline__
+static half2 h2div(half2 a, half2 b)  {
+    float2 af = half22float2(a);
+    float2 bf = half22float2(b);
+    float2 of;
+    of.x = __fdividef(af.x, bf.x);
+    of.y = __fdividef(af.y, bf.y);
+    return float22half2<half2>(of);
+};
+__device__ __forceinline__
+static __nv_bfloat162 h2div(__nv_bfloat162 a, __nv_bfloat162 b)  {
+    float2 af = half22float2(a);
+    float2 bf = half22float2(b);
+    float2 of;
+    of.x = __fdividef(af.x, bf.x);
+    of.y = __fdividef(af.y, bf.y);
+    return float22half2<__nv_bfloat162>(of);
+};
+
+__device__ __forceinline__
 static void reduce_add(float *addr, float val) {
     asm volatile ("red.relaxed.gpu.global.add.f32 [%0], %1;" :: "l"(addr), "f"(val));
 }
@@ -255,3 +270,5 @@ static void unrolled_loop(F &&lambda) {
     };
     call(std::make_integer_sequence<int, cnt>());
 }
+
+};  // namespace nunchaku::kernels

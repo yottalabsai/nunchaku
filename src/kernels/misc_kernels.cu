@@ -2,6 +2,8 @@
 #include "misc_kernels.h"
 #include "dispatch_utils.h"
 
+namespace nunchaku::kernels {
+
 Tensor add(Tensor a, Tensor b) {
     assert(a.shape.dataExtent == b.shape.dataExtent);
     assert(a.dtype() == b.dtype());
@@ -34,11 +36,11 @@ void mul_add(Tensor x, Tensor scale, Tensor bias) {
     constexpr int unroll = 8;
 
     assert((uintptr_t)x.data_ptr() % (x.scalar_size() * unroll) == 0);
-    assert((uintptr_t)scale.data_ptr() % (x.scalar_size() * unroll) == 0);
+    assert(!scale.valid() || (uintptr_t)scale.data_ptr() % (x.scalar_size() * unroll) == 0);
     assert((uintptr_t)bias.data_ptr() % (x.scalar_size() * unroll) == 0);
 
     assert(x.numel() % unroll == 0);
-    assert(scale.numel() % unroll == 0);
+    assert(!scale.valid() || scale.numel() % unroll == 0);
     assert(bias.numel() % unroll == 0);
 
     int threadsPerBlock = 1024;
@@ -47,8 +49,60 @@ void mul_add(Tensor x, Tensor scale, Tensor bias) {
     auto stream = getCurrentCUDAStream();
 
     dispatch(x.scalar_type(), [&]<typename scalar_t>() {
-        mul_add_kernel<scalar_t, unroll><<<blocksPerGrid, threadsPerBlock, 0, stream>>>(
-            x.data_ptr<scalar_t>(), scale.data_ptr<scalar_t>(), bias.data_ptr<scalar_t>(), x.numel(), scale.numel(), bias.numel());
+        if (scale.valid()) {
+            mul_add_kernel<scalar_t, unroll, false><<<blocksPerGrid, threadsPerBlock, 0, stream>>>(
+                x.data_ptr<scalar_t>(), scale.data_ptr<scalar_t>(), bias.data_ptr<scalar_t>(), 0, x.numel(), scale.numel(), bias.numel(), 0, 0, 0);
+        } else {
+            mul_add_kernel<scalar_t, unroll, true><<<blocksPerGrid, threadsPerBlock, 0, stream>>>(
+                x.data_ptr<scalar_t>(), nullptr, bias.data_ptr<scalar_t>(), 0, x.numel(), 1, bias.numel(), 0, 0, 0);
+        }
+    });
+}
+
+void mul_add_batch(Tensor x, Tensor scale, bool batch_scale, double scale_shift, Tensor bias, bool batch_bias) {
+
+    const int batch_size = x.shape[0];
+    assert(!batch_scale || scale.shape[0] == batch_size);
+    assert(!batch_bias || bias.shape[0] == batch_size);
+
+    const int numel = x.numel() / batch_size;
+    const int numel_scale = scale.valid() ? (scale.numel() / (batch_scale ? batch_size : 1)) : 1;
+    const int numel_bias  = bias.numel() / (batch_bias ? batch_size : 1);
+
+    assert(numel % numel_scale == 0);
+    assert(numel % numel_bias == 0);
+    assert(!scale.valid() || x.dtype() == scale.dtype());
+    assert(x.dtype() == bias.dtype());
+
+    constexpr int unroll = 8;
+
+    assert((uintptr_t)x.data_ptr() % (x.scalar_size() * unroll) == 0);
+    assert(!scale.valid() || (uintptr_t)scale.data_ptr() % (x.scalar_size() * unroll) == 0);
+    assert((uintptr_t)bias.data_ptr() % (x.scalar_size() * unroll) == 0);
+
+    assert(numel % unroll == 0);
+    assert(!scale.valid() || numel_scale % unroll == 0);
+    assert(numel_bias % unroll == 0);
+
+    int threadsPerBlock = 1024;
+    dim3 grid(ceilDiv(numel, threadsPerBlock * unroll), batch_size);
+
+    auto stream = getCurrentCUDAStream();
+
+    dispatch(x.scalar_type(), [&]<typename scalar_t>() {
+        if (scale.valid()) {
+            mul_add_kernel<scalar_t, unroll, false><<<grid, threadsPerBlock, 0, stream>>>(
+                x.data_ptr<scalar_t>(), scale.data_ptr<scalar_t>(), bias.data_ptr<scalar_t>(), 
+                (scalar_t)scale_shift,
+                numel, numel_scale, numel_bias, 
+                x.stride(0), batch_scale ? scale.stride(0) : 0, batch_bias ? bias.stride(0) : 0);
+        } else {
+            mul_add_kernel<scalar_t, unroll, true><<<grid, threadsPerBlock, 0, stream>>>(
+                x.data_ptr<scalar_t>(), nullptr, bias.data_ptr<scalar_t>(), 
+                (scalar_t)scale_shift,
+                numel, 1, numel_bias, 
+                x.stride(0), 0, batch_bias ? bias.stride(0) : 0);
+        }
     });
 }
 
@@ -219,7 +273,7 @@ Tensor topk(Tensor x, int k) {
     assert(k <= N);
     assert(k <= MAXK);
 
-    auto outShape = x.shape;
+    auto outShape = TensorShape(x.shape.dataExtent);
     outShape[-1] = k;
     outShape.dataStride.clear();
 
@@ -253,3 +307,5 @@ template std::array<Tensor, 3> split_mod<3>(Tensor input);
 template std::array<Tensor, 4> split_mod<4>(Tensor input);
 template std::array<Tensor, 5> split_mod<5>(Tensor input);
 template std::array<Tensor, 6> split_mod<6>(Tensor input);
+
+};  // namespace nunchaku::kernels

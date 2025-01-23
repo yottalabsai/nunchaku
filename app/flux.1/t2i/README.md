@@ -40,7 +40,7 @@ python latency.py
   - For FLUX.1-schnell, the defaults are 4 steps and a guidance scale of 0.
   - For FLUX.1-dev, the defaults are 50 steps and a guidance scale of 3.5.
 * By default, the script measures the end-to-end latency for generating a single image. To measure the latency of a single DiT forward step instead, use the `--mode step` flag.
-* Specify the number of warmup and test runs using `--warmup_times` and `--test_times`. The defaults are 2 warmup runs and 10 test runs.
+* Specify the number of warmup and test runs using `--warmup-times` and `--test-times`. The defaults are 2 warmup runs and 10 test runs.
 
 ## Quality Results
 

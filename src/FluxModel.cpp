@@ -9,12 +9,13 @@
 #include <iostream>
 
 using spdlog::fmt_lib::format;
+using namespace nunchaku;
 
 
 
 Tensor forward_mlp(GEMM_W4A4 &fc1, GEMM_W4A4 &fc2, Tensor norm_hidden_states) {
-    Tensor ff_output = std::get<Tensor>(fc2.forward_quant(
-        std::get<GEMM_W4A4::QuantizedActivation>(fc1.forward(norm_hidden_states, GEMM_W4A4::FuseOptions::GELU_QUANT, &fc2)))
+    Tensor ff_output = fc2.forward_quant(
+        std::get<GEMM_W4A4::QuantizedActivation>(fc1.forward(norm_hidden_states, GEMM_W4A4::FuseOptions::GELU_QUANT, &fc2))
     );
     return ff_output;
 }
@@ -26,7 +27,8 @@ Tensor forward_mlp(GEMM_W4A4 &fc1, GEMM_W4A4 &fc2, Tensor norm_hidden_states) {
 
 
 Tensor forward_fc(GEMM_W4A4 &fc, Tensor x) {
-    return std::get<Tensor>(fc.forward(x));
+    return fc.forward(x);
+    // return std::get<Tensor>(fc.forward(x));
 }
 
 // Tensor forward_fc(GEMM_W8A8 &fc, Tensor x) {
@@ -49,7 +51,7 @@ AdaLayerNormZeroSingle::Output AdaLayerNormZeroSingle::forward(Tensor x, Tensor 
     debug("emb_input", emb);
     emb = linear.forward(Silu::forward(emb));
     debug("emb_linear", emb);
-    auto &&[shift_msa, scale_msa, gate_msa] = split_mod<3>(emb);
+    auto &&[shift_msa, scale_msa, gate_msa] = kernels::split_mod<3>(emb);
     debug("scale_msa", scale_msa);
     debug("shift_msa", shift_msa);
 
@@ -57,7 +59,7 @@ AdaLayerNormZeroSingle::Output AdaLayerNormZeroSingle::forward(Tensor x, Tensor 
     Tensor norm_x = norm.forward(x);
     debug("norm_x", norm_x);
     
-    mul_add(norm_x, scale_msa, shift_msa);
+    kernels::mul_add(norm_x, scale_msa, shift_msa);
     return Output{norm_x, gate_msa};
 }
 
@@ -80,24 +82,24 @@ AdaLayerNormZero::Output AdaLayerNormZero::forward(Tensor x, Tensor emb) {
     debug("emb_linear", emb);
 
     if (pre_only) {
-        auto &&[shift_msa, scale_msa] = split_mod<2>(emb);
+        auto &&[shift_msa, scale_msa] = kernels::split_mod<2>(emb);
         debug("shift_msa", shift_msa);
 
         Tensor norm_x = norm.forward(x);
         debug("norm_x", norm_x);
 
-        mul_add(norm_x, scale_msa, shift_msa);
+        kernels::mul_add(norm_x, scale_msa, shift_msa);
         debug("norm_x_scaled", norm_x);
         
         return Output{norm_x};
     } else {
-        auto &&[shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp] = split_mod<6>(emb);
+        auto &&[shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp] = kernels::split_mod<6>(emb);
         debug("shift_msa", shift_msa);
 
         Tensor norm_x = norm.forward(x);
         debug("norm_x", norm_x);
 
-        mul_add(norm_x, scale_msa, shift_msa);
+        kernels::mul_add(norm_x, scale_msa, shift_msa);
         debug("norm_x_scaled", norm_x);
 
         return Output{norm_x, gate_msa, shift_mlp, scale_mlp, gate_mlp};
@@ -149,7 +151,7 @@ Tensor Attention::forward(Tensor qkv, Tensor pool_qkv, float sparsityRatio) {
         }
     }
     
-    blockmask = topk(pool_score, pool_tokens * (1 - sparsityRatio));
+    blockmask = kernels::topk(pool_score, pool_tokens * (1 - sparsityRatio));
 
     if (cu_seqlens_cpu.valid()) {
         if (cu_seqlens_cpu.shape[0] != batch_size + 1) {
@@ -173,7 +175,7 @@ Tensor Attention::forward(Tensor qkv, Tensor pool_qkv, float sparsityRatio) {
 
     if (cast_fp16) {
         Tensor tmp = Tensor::empty(qkv.shape.dataExtent, Tensor::FP16, qkv.device());
-        cast(qkv, tmp);
+        kernels::cast(qkv, tmp);
         qkv = tmp;
     }
 
@@ -206,7 +208,7 @@ Tensor Attention::forward(Tensor qkv, Tensor pool_qkv, float sparsityRatio) {
 
     if (cast_fp16) {
         Tensor tmp = Tensor::empty(raw_attn_output.shape.dataExtent, Tensor::BF16, raw_attn_output.device());
-        cast(raw_attn_output, tmp);
+        kernels::cast(raw_attn_output, tmp);
         raw_attn_output = tmp;
     }
 
@@ -315,10 +317,10 @@ Tensor FluxSingleTransformerBlock::forward(Tensor hidden_states, Tensor temb, Te
     Tensor ff_output = forward_mlp(mlp_fc1, mlp_fc2, norm_hidden_states);
     debug("ff_output", ff_output);
 
-    hidden_states = add(attn_output, ff_output);
+    hidden_states = kernels::add(attn_output, ff_output);
     debug("attn_ff_output", hidden_states);
     
-    mul_add(hidden_states, gate, residual);
+    kernels::mul_add(hidden_states, gate, residual);
 
     nvtxRangePop();
 
@@ -501,7 +503,7 @@ std::tuple<Tensor, Tensor> JointTransformerBlock::forward(Tensor hidden_states, 
         debug("img.attn_output", attn_output);
 
 #if 1
-        mul_add(attn_output, gate_msa, hidden_states);
+        kernels::mul_add(attn_output, gate_msa, hidden_states);
         hidden_states = std::move(attn_output);
 
         nvtxRangePop();
@@ -512,7 +514,7 @@ std::tuple<Tensor, Tensor> JointTransformerBlock::forward(Tensor hidden_states, 
         Tensor norm_hidden_states = norm2.forward(hidden_states);
         debug("scale_mlp", scale_mlp);
         debug("shift_mlp", shift_mlp);
-        mul_add(norm_hidden_states, scale_mlp, shift_mlp);
+        kernels::mul_add(norm_hidden_states, scale_mlp, shift_mlp);
 
         spdlog::debug("norm_hidden_states={}", norm_hidden_states.shape.str());
 #else
@@ -525,7 +527,7 @@ std::tuple<Tensor, Tensor> JointTransformerBlock::forward(Tensor hidden_states, 
         debug("img.ff_output", ff_output);
 
         debug("gate_mlp", gate_mlp);
-        mul_add(ff_output, gate_mlp, hidden_states);
+        kernels::mul_add(ff_output, gate_mlp, hidden_states);
         hidden_states = std::move(ff_output);
 
         nvtxRangePop();
@@ -566,7 +568,7 @@ std::tuple<Tensor, Tensor> JointTransformerBlock::forward(Tensor hidden_states, 
         debug("context.attn_output", attn_output);
 
 #if 1
-        mul_add(attn_output, gate_msa, encoder_hidden_states);
+        kernels::mul_add(attn_output, gate_msa, encoder_hidden_states);
         encoder_hidden_states = std::move(attn_output);
 
         nvtxRangePop();
@@ -577,7 +579,7 @@ std::tuple<Tensor, Tensor> JointTransformerBlock::forward(Tensor hidden_states, 
         Tensor norm_hidden_states = norm2_context.forward(encoder_hidden_states);
         debug("c_scale_mlp", scale_mlp);
         debug("c_shift_mlp", shift_mlp);
-        mul_add(norm_hidden_states, scale_mlp, shift_mlp);
+        kernels::mul_add(norm_hidden_states, scale_mlp, shift_mlp);
 
         spdlog::debug("norm_hidden_states={}", norm_hidden_states.shape.str());
 #else
@@ -592,7 +594,7 @@ std::tuple<Tensor, Tensor> JointTransformerBlock::forward(Tensor hidden_states, 
         debug("context.ff_output", ff_output);
 
         debug("c_gate_mlp", gate_mlp);
-        mul_add(ff_output, gate_mlp, encoder_hidden_states);
+        kernels::mul_add(ff_output, gate_mlp, encoder_hidden_states);
         encoder_hidden_states = std::move(ff_output);
 
         nvtxRangePop();

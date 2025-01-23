@@ -47,7 +47,7 @@ Tensor gemm_batched_fp16(
     auto sizeO = cutlass::MatrixCoord(M, N);
 
     if (!out.valid()) {
-        auto outShape = a.shape;
+        auto outShape = TensorShape(a.shape.dataExtent);
         outShape[-1] = N;
         out = Tensor::empty(outShape, Tensor::FP32, a.device());
     }

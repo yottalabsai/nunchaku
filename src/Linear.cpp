@@ -1,8 +1,30 @@
 #include "Linear.h"
-#include "kernels/gemm_w4a4.h"
+#include "kernels/zgemm/zgemm.h"
 #include "kernels/gemm_f16.h"
 #include "kernels/misc_kernels.h"
 #include "kernels/awq/gemv_awq.h"
+#include "kernels/dwconv.h"
+
+#include <nvtx3/nvToolsExt.h>
+
+using namespace nunchaku;
+
+GEMM_F16::GEMM_F16(int in_features, int out_features, bool use_bias, Tensor::ScalarType dtype, Device device) :
+    in_features(in_features), out_features(out_features)
+{
+    this->weight = Tensor::allocate({out_features, in_features}, dtype, device);
+    this->bias = use_bias ? Tensor::allocate({out_features}, dtype, device) : Tensor{};
+
+    registerParams
+        (weight, "weight")
+        (bias, "bias")
+    ;
+}
+
+Tensor GEMM_F16::forward(Tensor x) {
+    Tensor out = gemm_f16(x, this->weight, {}, this->bias, 1.0f);
+    return out;
+}
 
 GEMV_AWQ::GEMV_AWQ(int in_features, int out_features, bool use_bias, Tensor::ScalarType dtype, Device device) : 
     in_features(in_features), out_features(out_features), group_size(64), lora_rank(0), lora_scale(1.0f)
@@ -51,19 +73,19 @@ Tensor GEMV_AWQ::forward(Tensor x) {
     if (bias.valid()) {
         // TODO: batch
         assert(out.numel() == bias.numel());
-        out = add(out, bias.view(out.shape.dataExtent));
+        out = kernels::add(out, bias.view(out.shape.dataExtent));
     }
 
     debug("out_before_lora", out);
 
     if (this->lora_rank > 0) {
-        Tensor lora_act = gemm_f16(x, this->lora_down, {}, 1.0f, 0.0f);
+        Tensor lora_act = gemm_f16(x, this->lora_down, {}, {}, 1.0f);
         debug("lora_act", lora_act);
 
-        Tensor lora_out = gemm_f16(lora_act, this->lora_up, {}, this->lora_scale, 0.0f);
+        Tensor lora_out = gemm_f16(lora_act, this->lora_up, {}, {}, this->lora_scale);
         debug("lora_out", lora_out);
 
-        out = add(out, lora_out);
+        out = kernels::add(out, lora_out);
     }
 
     debug("out", out);
@@ -75,19 +97,21 @@ Tensor GEMV_AWQ::forward(Tensor x) {
 #define NO_LORA_FUSION 0
 
 GEMM_W4A4::GEMM_W4A4(int in_features, int out_features, bool bias, Tensor::ScalarType dtype, Device device) : 
-    in_features(in_features), out_features(out_features), lora_rank(0), dtype(dtype)
+    in_features(in_features), out_features(out_features), 
+    in_features_pad(ceilDiv(in_features, 128) * 128), out_features_pad(ceilDiv(out_features, 128) * 128),
+    lora_rank(0), dtype(dtype)
 {
-    this->qweight = Tensor::allocate({out_features, in_features / 2}, Tensor::INT8, device, true);
-    this->wscales = Tensor::allocate({in_features / 64, out_features}, dtype, device, true);
+    this->qweight = Tensor::allocate({out_features_pad, in_features_pad / 2}, Tensor::INT8, device, true);
+    this->wscales = Tensor::allocate({in_features_pad / 64, out_features_pad}, dtype, device, true);
 
-    this->bias = bias ? Tensor::allocate({out_features}, dtype, device, true) : Tensor{};
+    this->bias = bias ? Tensor::allocate({out_features_pad}, dtype, device, true) : Tensor{};
 
-    this->lora_down = Tensor::allocate({in_features, lora_rank}, dtype, device, true);
-    this->lora_up = Tensor::allocate({out_features, lora_rank}, dtype, device, true);
+    this->lora_down = Tensor::allocate({in_features_pad, lora_rank}, dtype, device, true);
+    this->lora_up = Tensor::allocate({out_features_pad, lora_rank}, dtype, device, true);
 
     // TODO: smooth factor in FC1+FC2 fusion
     // TODO: smooth factor in non-Lora fusion
-    this->smooth = Tensor::allocate({in_features}, dtype, device, true);
+    this->smooth = Tensor::allocate({in_features_pad}, dtype, device, true);
 
     registerParams
         (qweight, "qweight")
@@ -118,12 +142,20 @@ void GEMM_W4A4::loadParam(std::string key, Tensor &dst, Tensor src) {
     }
 }
 
+Tensor GEMM_W4A4::forward(Tensor x) {
+    return std::get<Tensor>(this->forward(x, FuseOptions::EMPTY, nullptr));
+}
+
+Tensor GEMM_W4A4::forward_silu(Tensor x) {
+    return std::get<Tensor>(this->forward(x, FuseOptions::SILU, nullptr));
+}
+
 std::variant<Tensor, GEMM_W4A4::QuantizedActivation> GEMM_W4A4::forward(Tensor x, FuseOptions fuse, GEMM_W4A4 *nextGEMM) {
-    return forward_quant(quantize(x), fuse, nextGEMM);
+    return forward_quant(quantize(x, false), fuse, nextGEMM);
 }
 
 void GEMM_W4A4::forward(Tensor x, Tensor out, Tensor pool, Tensor norm_q, Tensor norm_k, Tensor rotary_emb) {
-    QuantizedActivation qact = quantize(x);
+    QuantizedActivation qact = quantize(x, false);
 
 #if !NO_LORA_FUSION
 
@@ -135,13 +167,13 @@ void GEMM_W4A4::forward(Tensor x, Tensor out, Tensor pool, Tensor norm_q, Tensor
     debug("gemm.nolora.out", out);
 #endif
 
-    gemm_w4a4(qact.act, qweight, out, {}, qact.ascales, wscales, {}, pool, qact.lora_act, this->lora_up, {}, {}, norm_q, norm_k, rotary_emb, this->bias, {}, qact.is_unsigned, this->lora_scales);
+    kernels::gemm_w4a4(qact.act, qweight, out, {}, qact.ascales, wscales, {}, pool, qact.lora_act, this->lora_up, {}, {}, norm_q, norm_k, rotary_emb, this->bias, {}, {}, {}, qact.is_unsigned, this->lora_scales, false);
 
     debug("gemm.out", out);
 #else
     const int M = (int)qact.act.numel() / qact.act.shape[-1];
 
-    gemm_w4a4(qact.act, qweight, out, {}, qact.ascales, wscales, {}, pool, {}, {}, {}, {});
+    kernels::gemm_w4a4(qact.act, qweight, out, {}, qact.ascales, wscales, {}, pool, {}, {}, {}, {}, norm_q, norm_k, rotary_emb, this->bias, {}, qact.is_unsigned, this->lora_scales);
 
     nvtxRangePushA("LoraUp");
 
@@ -175,17 +207,18 @@ std::variant<Tensor, GEMM_W4A4::QuantizedActivation> GEMM_W4A4::forward_quant(Qu
 
     const int M = (int)qact.act.numel() / qact.act.shape[-1];
 
-    if (fuse == FuseOptions::EMPTY) {
-        auto shape = TensorShape(qact.act.shape.dataExtent);
+    if (fuse == FuseOptions::EMPTY || fuse == FuseOptions::SILU) {
+        // auto shape = TensorShape(qact.act.shape.dataExtent);
+        // shape[-1] = out_features;
+        auto shape = TensorShape(qact.actShape.dataExtent);
         shape[-1] = out_features;
         out = Tensor::allocate(shape, dtype, qweight.device());
     } else {
-        auto shape = TensorShape(qact.act.shape.dataExtent);
-        shape[-1] = out_features / 2;
-        qout.act = Tensor::allocate(shape, Tensor::INT8, qweight.device());
-        qout.ascales = Tensor::allocate({out_features / 64, M}, dtype, qweight.device());
+        qout.act = Tensor::allocate({M, out_features_pad / 2}, Tensor::INT8, qweight.device());
+        qout.ascales = Tensor::allocate({out_features_pad / 64, M}, dtype, qweight.device());
         qout.lora_act = Tensor::allocate({M, lora_rank}, Tensor::FP32, qweight.device());
         qout.is_unsigned = true;
+        qout.actShape = qact.actShape;
 
         next_lora = nextGEMM->lora_down;
         next_smooth = nextGEMM->smooth;
@@ -208,9 +241,9 @@ std::variant<Tensor, GEMM_W4A4::QuantizedActivation> GEMM_W4A4::forward_quant(Qu
     }
 #endif
 
-    gemm_w4a4(qact.act, qweight, out, qout.act, qact.ascales, wscales, qout.ascales, {}, qact.lora_act, this->lora_up, next_lora, qout.lora_act, {}, {}, {}, this->bias, next_smooth, qact.is_unsigned, this->lora_scales);
+    kernels::gemm_w4a4(qact.act, qweight, out, qout.act, qact.ascales, wscales, qout.ascales, {}, qact.lora_act, this->lora_up, next_lora, qout.lora_act, {}, {}, {}, this->bias, next_smooth, {}, {}, qact.is_unsigned, this->lora_scales, fuse == FuseOptions::SILU);
 
-    if (fuse == FuseOptions::EMPTY) {
+    if (fuse == FuseOptions::EMPTY || fuse == FuseOptions::SILU) {
         debug("gemm.out", out);
     } else {
         debug("gemm.qout", qout.act);
@@ -226,7 +259,7 @@ std::variant<Tensor, GEMM_W4A4::QuantizedActivation> GEMM_W4A4::forward_quant(Qu
         out = Tensor::allocate(shape, Tensor::FP16, qweight.device());
     }
 
-    gemm_w4a4(qact.act, qweight, out, qout.act, qact.ascales, wscales, qout.ascales, {}, {}, {}, {}, {});
+    kernels::gemm_w4a4(qact.act, qweight, out, qout.act, qact.ascales, wscales, qout.ascales, {}, {}, {}, {}, {}, {}, {}, {}, this->bias, next_smooth, qact.is_unsigned, this->lora_scales);
 
     nvtxRangePushA("LoraUp");
 
@@ -281,23 +314,29 @@ std::variant<Tensor, GEMM_W4A4::QuantizedActivation> GEMM_W4A4::forward_quant(Qu
     return qout;
 }
 
-GEMM_W4A4::QuantizedActivation GEMM_W4A4::quantize(Tensor x) {
-    const int M = x.numel() / x.shape[-1];
+Tensor GEMM_W4A4::forward_quant(QuantizedActivation qact) {
+    return std::get<Tensor>(this->forward_quant(qact, FuseOptions::EMPTY, nullptr));
+}
 
-    auto shape = TensorShape(x.shape.dataExtent);
-    shape[-1] = in_features / 2;
+GEMM_W4A4::QuantizedActivation GEMM_W4A4::quantize(Tensor x, bool fuse_glu) {
+    const int actualM = x.numel() / x.shape[-1];
+    const int M = ceilDiv(actualM, 256) * 256;
+
+    // auto shape = TensorShape(x.shape.dataExtent);
+    // shape[-1] = in_features / 2;
 
     QuantizedActivation qact;
-    qact.act = Tensor::allocate(shape, Tensor::INT8, qweight.device());
-    qact.ascales = Tensor::allocate({in_features / 64, M}, dtype, qweight.device());
+    qact.act = Tensor::allocate({M, in_features_pad / 2}, Tensor::INT8, qweight.device());
+    qact.ascales = Tensor::allocate({in_features_pad / 64, M}, dtype, qweight.device());
     qact.lora_act = Tensor::allocate({M, lora_rank}, Tensor::FP32, qweight.device());
     qact.is_unsigned = false;
+    qact.actShape = x.shape.dataExtent;
 
 #if !NO_LORA_FUSION
     debug("quantize.x", x);
     debug("quantize.smooth", this->smooth);
 
-    quantize_w4a4_act_fuse_lora(x, qact.act, qact.ascales, this->lora_down, qact.lora_act, this->smooth);
+    kernels::quantize_w4a4_act_fuse_lora(x, qact.act, qact.ascales, this->lora_down, qact.lora_act, this->smooth, fuse_glu);
 
     debug("quantize.qact", qact.act);
     debug("quantize.ascales", qact.ascales);
@@ -325,9 +364,68 @@ GEMM_W4A4::QuantizedActivation GEMM_W4A4::quantize(Tensor x) {
 
     nvtxRangePop();
 
-    quantize_w4a4_act(x, qact.act, qact.ascales);
+    kernels::quantize_w4a4_act(x, qact.act, qact.ascales);
 
 #endif
 
     return qact;
+}
+
+GEMM_W8A8::GEMM_W8A8(int in_features, int out_features, bool bias, Tensor::ScalarType dtype, Device device) : 
+    in_features(in_features), out_features(out_features), dtype(dtype)
+{
+    this->qweight = Tensor::allocate({out_features, in_features}, Tensor::INT8, device);
+    this->wscales = Tensor::allocate({out_features}, dtype, device);
+    this->bias = bias ? Tensor::allocate({out_features}, dtype, device, true) : Tensor{};
+
+    registerParams
+        (qweight, "qweight")
+        (wscales, "wscales")
+        (this->bias, "bias")
+    ;
+}
+
+GEMM_W8A8::QuantizedActivation GEMM_W8A8::quantize(Tensor x, bool fuse_glu) {
+    QuantizedActivation qact;
+    auto qshape = x.shape;
+    if (fuse_glu) {
+        qshape[-1] /= 2;
+    }
+    qact.act = Tensor::allocate(qshape, Tensor::INT8, x.device());
+    qact.ascales = Tensor::allocate({(int)x.numel() / x.shape[-1]}, this->dtype, x.device());
+
+    debug("quantize.x", x);
+
+    kernels::quantize_w8a8_act(x, qact.act, qact.ascales, fuse_glu);
+
+    debug("quantize.qact", qact.act);
+    debug("quantize.ascales", qact.ascales);
+
+    return qact;
+}
+
+Tensor GEMM_W8A8::forward_quant(QuantizedActivation qact) {
+    auto oshape = qact.act.shape;
+    oshape[-1] = out_features;
+    Tensor out = Tensor::allocate(oshape, this->dtype, qact.act.device());
+    kernels::gemm_w8a8(qact.act, this->qweight, out, qact.ascales, this->wscales, this->bias);
+
+    debug("gemm.out", out);
+    return out;
+}
+
+DWCONV::DWCONV(int in_features, bool use_bias, Tensor::ScalarType dtype, Device device) : 
+    in_features(in_features)
+{
+    this->weight = Tensor::allocate({in_features, 3, 3, 1}, dtype, device);
+    this->bias = use_bias ? Tensor::allocate({in_features}, dtype, device) : Tensor{};
+
+    registerParams
+        (this->weight, "weight")
+        (this->bias, "bias")
+    ;
+}
+
+Tensor DWCONV::forward(Tensor x) {
+    return dwconv_f16(x, this->weight, {}, this->bias);
 }

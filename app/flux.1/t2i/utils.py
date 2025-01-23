@@ -22,8 +22,8 @@ def get_pipeline(
     lora_name: str = "None",
     lora_weight: float = 1,
     device: str | torch.device = "cuda",
+    pipeline_init_kwargs: dict = {},
 ) -> FluxPipeline:
-    pipeline_init_kwargs = {}
     if model_name == "schnell":
         if precision == "int4":
             assert torch.device(device).type == "cuda", "int4 only supported on CUDA devices"
@@ -56,7 +56,9 @@ def get_pipeline(
             )
         else:
             assert precision == "bf16"
-            pipeline = FluxPipeline.from_pretrained("black-forest-labs/FLUX.1-dev", torch_dtype=torch.bfloat16)
+            pipeline = FluxPipeline.from_pretrained(
+                "black-forest-labs/FLUX.1-dev", torch_dtype=torch.bfloat16, **pipeline_init_kwargs
+            )
             if lora_name == "All":
                 # Pre-load all the LoRA weights for demo use
                 for name, path in LORA_PATHS.items():

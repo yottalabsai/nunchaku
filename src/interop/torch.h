@@ -13,6 +13,10 @@ public:
         this->device.type = this->tensor.is_cuda() ? Device::CUDA : Device::CPU;
         this->device.idx = this->tensor.get_device();
     }
+    virtual bool isAsyncBuffer() override { 
+        // TODO: figure out how torch manages memory
+        return true;
+    }
 private:
     at::Tensor tensor;
 };

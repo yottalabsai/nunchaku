@@ -7,6 +7,8 @@
 #include "utils.cuh"
 #include "activation_kernels_impl.cuh"
 
+namespace nunchaku::kernels {
+
 
 template<typename T>
 __global__ void add_kernel(T *a, T *b, T *c, size_t length) {
@@ -21,9 +23,9 @@ struct alignas(sizeof(T) * unroll) Tvec {
     T data[unroll];
 };
 
-template<typename T, int unroll>
-__global__ void mul_add_kernel(T *x, T *scale, T *bias, size_t length, int mod_scale, int mod_bias) {
-
+template<typename T, int unroll, bool no_scale>
+__global__ void mul_add_kernel(T *x, T *scale, T *bias, T scale_shift, size_t length, int mod_scale, int mod_bias, int64_t batch_stride_x, int64_t batch_stride_scale, int64_t batch_stride_bias) {
+    const int batch_id = blockIdx.y;
     int thread = threadIdx.x + blockIdx.x * blockDim.x;
     int i = thread * unroll;
     int i_scale = i % mod_scale;
@@ -33,15 +35,20 @@ __global__ void mul_add_kernel(T *x, T *scale, T *bias, size_t length, int mod_s
         return;
     }
 
-    using Tvec = ::Tvec<T, unroll>;
+    using Tvec = nunchaku::kernels::Tvec<T, unroll>;
 
-    Tvec rx = *reinterpret_cast<Tvec *>(&x[i]);
-    Tvec rscale = *reinterpret_cast<Tvec *>(&scale[i_scale]);
-    Tvec rbias = *reinterpret_cast<Tvec *>(&bias[i_bias]);
+    Tvec rx = *reinterpret_cast<Tvec *>(&x[i + batch_stride_x * batch_id]);
+    Tvec rscale = *reinterpret_cast<Tvec *>(&scale[i_scale + batch_stride_scale * batch_id]);
+    Tvec rbias = *reinterpret_cast<Tvec *>(&bias[i_bias + batch_stride_bias * batch_id]);
 
 #pragma unroll
     for (int k = 0; k < unroll; k++) {
-        T tmp = rx.data[k] * rscale.data[k] + rbias.data[k];
+        T tmp;
+        if constexpr (no_scale) {
+            tmp = rx.data[k] + rbias.data[k];
+        } else {
+            tmp = rx.data[k] * (rscale.data[k] + scale_shift) + rbias.data[k];
+        }
         if constexpr (std::is_same_v<T, half>) {
             tmp = __hmin(tmp, (half)65504);
             tmp = __hmax(tmp, (half)-65504);
@@ -49,7 +56,7 @@ __global__ void mul_add_kernel(T *x, T *scale, T *bias, size_t length, int mod_s
         rx.data[k] = tmp;
     }
 
-    *reinterpret_cast<Tvec *>(&x[i]) = rx;
+    *reinterpret_cast<Tvec *>(&x[i + batch_stride_x * batch_id]) = rx;
 
 // #pragma unroll
 //     for (int k = 0; k < unroll; k++) {
@@ -127,8 +134,8 @@ __global__ void quant_kernel_static(const T * input, int8_t * output, T scale, s
         return;
     }
 
-    using Tvec = ::Tvec<T, unroll>;
-    using I8vec = ::Tvec<int8_t, unroll>;
+    using Tvec = nunchaku::kernels::Tvec<T, unroll>;
+    using I8vec = nunchaku::kernels::Tvec<int8_t, unroll>;
 
     Tvec rinput = *reinterpret_cast<const Tvec *>(&input[i]);
     I8vec routput;
@@ -149,8 +156,8 @@ __global__ void quant_kernel_static_fuse_gelu(const T * input, int8_t * output, 
         return;
     }
 
-    using Tvec = ::Tvec<T, unroll>;
-    using I8vec = ::Tvec<int8_t, unroll>;
+    using Tvec = nunchaku::kernels::Tvec<T, unroll>;
+    using I8vec = nunchaku::kernels::Tvec<int8_t, unroll>;
 
     Tvec rinput = *reinterpret_cast<const Tvec *>(&input[i]);
     I8vec routput;
@@ -168,8 +175,8 @@ template<typename Tin, typename Tout, int unroll>
 __global__ void cast_kernel(const Tin *input, Tout *output, size_t length) {
     const int i = (blockIdx.x * blockDim.x + threadIdx.x) * unroll;
 
-    using Tvec_in = ::Tvec<Tin, unroll>;
-    using Tvec_out = ::Tvec<Tout, unroll>;
+    using Tvec_in = nunchaku::kernels::Tvec<Tin, unroll>;
+    using Tvec_out = nunchaku::kernels::Tvec<Tout, unroll>;
 
     Tvec_in  rinput = *reinterpret_cast<const Tvec_in *>(&input[i]);
     Tvec_out routput;
@@ -251,3 +258,5 @@ void topk_kernel(const T *input, int *output, int N, int strideInput, int numRow
         output[row * K + i] = idx[K - i - 1];
     }
 }
+
+};  // namespace nunchaku::kernels

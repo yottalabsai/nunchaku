@@ -32,6 +32,10 @@ public:
     size_t getSize() { return size; }
     Device getDevice() { return device; }
 
+    virtual bool isAsyncBuffer() { 
+        return false;
+    }
+
 protected:
     template <typename Derived>
     std::shared_ptr<Derived> shared_from_base() {
@@ -89,6 +93,9 @@ public:
             return;
         }
         checkCUDA(cudaFreeAsync(this->ptr, 0));
+    }
+    virtual bool isAsyncBuffer() override { 
+        return true;
     }
 };
 
@@ -499,16 +506,16 @@ private:
         return cudaMemcpyDefault;
     }
 
-    static bool isAsyncBuffer(Buffer *buffer) {
-        return dynamic_cast<BufferCUDA *>(buffer);
-    }
+    // static bool isAsyncBuffer(Buffer *buffer) {
+    //     return dynamic_cast<BufferCUDA *>(buffer);
+    // }
 
     static inline std::map<cudaStream_t, std::set<std::shared_ptr<Buffer>>> lockedBuffers;
     
 public:
     // before launching an async operation, make sure to lock the buffer in case the buffer is freed before GPU completes
     static void lockBuffer(std::shared_ptr<Buffer> buffer, cudaStream_t stream) {
-        if (!isAsyncBuffer(buffer.get())) {
+        if (!buffer->isAsyncBuffer()) {
             lockedBuffers[stream].insert(buffer);
         }
     }

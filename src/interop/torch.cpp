@@ -33,7 +33,7 @@ Tensor from_torch(at::Tensor input) {
     result.scalarType = mapType.at(input.scalar_type());
     result.buffer = std::make_shared<BufferTorchTensor>(std::move(input));
 
-    Tensor::lockBuffer(result.buffer, getCurrentCUDAStream());
+    // Tensor::lockBuffer(result.buffer, getCurrentCUDAStream());
 
     return result;
 }

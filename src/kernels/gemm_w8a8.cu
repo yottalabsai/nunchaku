@@ -82,7 +82,7 @@ Tensor gemm_w8a8_fp16(Tensor input,  // INT8
     // auto out = bias.to(device).view({1, -1}).repeat({M, 1});
 
     if (!out.valid()) {
-        auto out_shape = input.shape;
+        auto out_shape = TensorShape(input.shape.dataExtent);
         out_shape[-1] = N;
         out = Tensor::empty(out_shape, Tensor::FP16, input.device());
     }

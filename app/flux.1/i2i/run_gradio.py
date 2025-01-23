@@ -1,8 +1,10 @@
 # Changed from https://github.com/GaParmar/img2img-turbo/blob/main/gradio_sketch2image.py
+import logging
 import os
 import random
 import tempfile
 import time
+from datetime import datetime
 
 import GPUtil
 import numpy as np
@@ -63,10 +65,11 @@ def save_image(img):
 
 
 def run(image, prompt: str, prompt_template: str, sketch_guidance: float, seed: int) -> tuple[Image, str]:
+    print(f"Prompt: {prompt}")
     image_numpy = np.array(image["composite"].convert("RGB"))
 
-    if prompt.strip() == "" and np.sum(image_numpy != 255) <= 100:
-        return image["composite"], "Please input the prompt or draw something."
+    if prompt.strip() == "" and (np.sum(image_numpy == 255) >= 3145628 or np.sum(image_numpy == 0) >= 3145628):
+        return blank_image, "Please input the prompt or draw something."
 
     is_unsafe_prompt = False
     if not safety_checker(prompt):
@@ -98,9 +101,12 @@ def run(image, prompt: str, prompt_template: str, sketch_guidance: float, seed: 
         else:
             count = 0
         count += 1
-        print(f"Use count: {count}")
+        current_time = datetime.now()
+        print(f"{current_time}: {count}")
         with open("use_count.txt", "w") as f:
             f.write(str(count))
+        with open("use_record.txt", "a") as f:
+            f.write(f"{current_time}: {count}\n")
     return result_image, latency_str
 
 
@@ -115,7 +121,27 @@ with gr.Blocks(css_paths="assets/style.css", title=f"SVDQuant Sketch-to-Image De
     else:
         device_info = "Running on CPU 🥶 This demo does not work on CPU."
     notice = f'<strong>Notice:</strong>&nbsp;We will replace unsafe prompts with a default prompt: "A peaceful world."'
-    gr.HTML(DESCRIPTION.format(device_info=device_info, notice=notice))
+
+    def get_header_str():
+
+        if args.count_use:
+            if os.path.exists("use_count.txt"):
+                with open("use_count.txt", "r") as f:
+                    count = int(f.read())
+            else:
+                count = 0
+            count_info = (
+                f"<div style='display: flex; justify-content: center; align-items: center; text-align: center;'>"
+                f"<span style='font-size: 18px; font-weight: bold;'>Total inference runs: </span>"
+                f"<span style='font-size: 18px; color:red; font-weight: bold;'>&nbsp;{count}</span></div>"
+            )
+        else:
+            count_info = ""
+        header_str = DESCRIPTION.format(device_info=device_info, notice=notice, count_info=count_info)
+        return header_str
+
+    header = gr.HTML(get_header_str())
+    demo.load(fn=get_header_str, outputs=header)
 
     with gr.Row(elem_id="main_row"):
         with gr.Column(elem_id="column_input"):

@@ -5,32 +5,13 @@
 #include "Serialization.h"
 #include "debug.h"
 #include "Linear.h"
+#include "module.h"
 
-class QuantizedFluxModel { // : public torch::CustomClassHolder {
+class QuantizedFluxModel : public ModuleWrapper<FluxModel> { // : public torch::CustomClassHolder {
 public:
     void init(bool bf16, int8_t deviceId) {
         spdlog::info("Initializing QuantizedFluxModel");
         net = std::make_unique<FluxModel>(bf16 ? Tensor::BF16 : Tensor::FP16, Device::cuda((int)deviceId));
-    }
-
-    void reset() {
-        debugContext.reset();
-        net.reset();
-        Tensor::synchronizeDevice();
-        trimMemory();
-        Tensor::synchronizeDevice();
-    }
-
-    void load(std::string path, bool partial = false) {
-        checkModel();
-
-        spdlog::info("{} weights from {}", partial ? "Loading partial" : "Loading", path);
-        
-        std::shared_ptr<SafeTensors> provider = std::make_shared<SafeTensors>(path);
-        net->loadParams(*provider, partial);
-        Tensor::synchronizeDevice();
-
-        spdlog::info("Done.");
     }
 
     torch::Tensor forward(
@@ -123,44 +104,6 @@ public:
         return hidden_states;
     }
 
-    void disableMemoryAutoRelease() {
-        int device;
-        checkCUDA(cudaGetDevice(&device));
-        cudaMemPool_t mempool;
-        checkCUDA(cudaDeviceGetDefaultMemPool(&mempool, device));
-        uint64_t threshold = UINT64_MAX;
-        checkCUDA(cudaMemPoolSetAttribute(mempool, cudaMemPoolAttrReleaseThreshold, &threshold));
-    }
-
-    void trimMemory() {
-        int device;
-        checkCUDA(cudaGetDevice(&device));
-        cudaMemPool_t mempool;
-        checkCUDA(cudaDeviceGetDefaultMemPool(&mempool, device));
-        size_t bytesToKeep = 0;
-        checkCUDA(cudaMemPoolTrimTo(mempool, bytesToKeep));
-    }
-
-    void startDebug() {
-        debugContext = std::make_unique<DebugContext>();
-    }
-    void stopDebug() {
-        debugContext.reset();
-    }
-
-    auto getDebugResults() {
-        // c10::Dict<std::string, torch::Tensor> result;
-        std::map<std::string, torch::Tensor> result;
-
-        if (debugContext) {
-            for (auto &&[key, value] : debugContext->tensors) {
-                // result.insert(key, to_torch(value));
-                result[key] = to_torch(value);
-            }
-        }
-        
-        return result;
-    }
 
     // must be called after loading lora
     // skip specific ranks in W4A4 layers
@@ -178,7 +121,7 @@ public:
                 for (int i = 0; i < skipRanks / 16; i++) {
                     m->lora_scales[i] = 1.0f;
                 }
-                for (int i = skipRanks / 16; i < m->lora_scales.size(); i++) {
+                for (int i = skipRanks / 16; i < (int)m->lora_scales.size(); i++) {
                     m->lora_scales[i] = scale;
                 }
             }
@@ -189,15 +132,4 @@ public:
         Attention::setForceFP16(net.get(), enable);
     }
 
-
-private:
-    void checkModel() {
-        if (!net) {
-            throw std::runtime_error("Model not initialized");
-        }
-    }
-
-private:
-    std::unique_ptr<FluxModel> net;
-    std::unique_ptr<DebugContext> debugContext;
 };

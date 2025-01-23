@@ -3,6 +3,7 @@ import argparse
 import os
 import random
 import time
+from datetime import datetime
 
 import GPUtil
 import spaces
@@ -40,18 +41,24 @@ def get_args() -> argparse.Namespace:
 args = get_args()
 
 
+pipeline_init_kwargs = {}
 pipelines = []
 for i, precision in enumerate(args.precisions):
     pipeline = get_pipeline(
         model_name=args.model,
         precision=precision,
         use_qencoder=args.use_qencoder,
-        device=f"cuda:{i}",
+        device="cuda",
         lora_name="All",
+        pipeline_init_kwargs={**pipeline_init_kwargs},
     )
     pipeline.cur_lora_name = "None"
     pipeline.cur_lora_weight = 0
     pipelines.append(pipeline)
+    if i == 0:
+        pipeline_init_kwargs["vae"] = pipeline.vae
+        pipeline_init_kwargs["text_encoder"] = pipeline.text_encoder
+        pipeline_init_kwargs["text_encoder_2"] = pipeline.text_encoder_2
 
 safety_checker = SafetyChecker("cuda", disabled=args.no_safety_checker)
 
@@ -67,6 +74,7 @@ def generate(
     lora_weight: float = 1,
     seed: int = 0,
 ):
+    print(f"Generating image with prompt: {prompt}")
     is_unsafe_prompt = False
     if not safety_checker(prompt):
         is_unsafe_prompt = True
@@ -130,15 +138,18 @@ def generate(
     torch.cuda.empty_cache()
 
     if args.count_use:
-        if os.path.exists("use_count.txt"):
-            with open("use_count.txt", "r") as f:
+        if os.path.exists(f"{args.model}-use_count.txt"):
+            with open(f"{args.model}-use_count.txt", "r") as f:
                 count = int(f.read())
         else:
             count = 0
         count += 1
-        print(f"Use count: {count}")
-        with open("use_count.txt", "w") as f:
+        current_time = datetime.now()
+        print(f"{current_time}: {count}")
+        with open(f"{args.model}-use_count.txt", "w") as f:
             f.write(str(count))
+        with open(f"{args.model}-use_record.txt", "a") as f:
+            f.write(f"{current_time}: {count}\n")
 
     return *images, *latency_strs
 
@@ -158,7 +169,27 @@ with gr.Blocks(
     css_paths=[f"assets/frame{len(args.precisions)}.css", "assets/common.css"],
     title=f"SVDQuant FLUX.1-{args.model} Demo",
 ) as demo:
-    gr.HTML(DESCRIPTION.format(model=args.model, device_info=device_info, notice=notice))
+
+    def get_header_str():
+
+        if args.count_use:
+            if os.path.exists(f"{args.model}-use_count.txt"):
+                with open(f"{args.model}-use_count.txt", "r") as f:
+                    count = int(f.read())
+            else:
+                count = 0
+            count_info = (
+                f"<div style='display: flex; justify-content: center; align-items: center; text-align: center;'>"
+                f"<span style='font-size: 18px; font-weight: bold;'>Total inference runs: </span>"
+                f"<span style='font-size: 18px; color:red; font-weight: bold;'>&nbsp;{count}</span></div>"
+            )
+        else:
+            count_info = ""
+        header_str = DESCRIPTION.format(model=args.model, device_info=device_info, notice=notice, count_info=count_info)
+        return header_str
+
+    header = gr.HTML(get_header_str())
+    demo.load(fn=get_header_str, outputs=header)
     with gr.Row():
         image_results, latency_results = [], []
         for i, precision in enumerate(args.precisions):
