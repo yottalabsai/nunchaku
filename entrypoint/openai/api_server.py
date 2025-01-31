@@ -78,19 +78,21 @@ async def imagesGenerations(req: CreateImageRequest, raw_req: Request) -> Respon
         end_time = time.time()
         latency = end_time - start_time
         logger.info(f"start_time: {start_time}, end_time: {end_time}, latency: {latency}")
+        
+        image_bytes = BytesIO()
+        image.save(image_bytes, format="PNG")
+        image_bytes.seek(0)
     except Exception as e:
         logger.exception("imagesGenerations failed")
         result = BaseResponse(code=10001, message="failed to generation image", data=[])    
         return JSONResponse(content=result.model_dump(), status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
+    finally:
+        del image
+        torch.cuda.empty_cache()
 
-    
     bucket = state.s3_bucket
     object_name = state.s3_prefix_path + f"{state.model}-{state.precision}-{uuid.uuid4()}.png"
     s3_client = state.s3_client
-    
-    image_bytes = BytesIO()
-    image.save(image_bytes, format="PNG")
-    image_bytes.seek(0)
 
     url = s3_util.upload_file_and_get_presigned_url(s3_client, bucket, object_name, image_bytes)
     if url is not None:
