@@ -22,7 +22,9 @@ def upload_fileobj(s3_client, file, bucket, object_name):
 def upload_file_and_get_presigned_url(s3_client, bucket, object_name, file):
     try:
         # Upload the file
-        upload_fileobj(s3_client, file, bucket, object_name)
+        if not upload_fileobj(s3_client, file, bucket, object_name):
+            logger.info(f"File {object_name} failed upload to {bucket}/{object_name}")
+            return None
         logger.info(f"File {object_name} uploaded to {bucket}/{object_name}")
         response_url = create_presigned_url(s3_client, bucket, object_name)
         if response_url is not None:
