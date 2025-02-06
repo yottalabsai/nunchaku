@@ -18,7 +18,8 @@ RUN mkdir -p /root/miniconda3 && \
 
 ENV PATH="/root/miniconda3/bin:$PATH"
 
-RUN conda create -n image python=3.12 && \
+RUN echo "$SHELL" && \
+    conda create -n image python=3.12 && \
     conda activate image && \
     pip install torch torchvision torchaudio && \
     pip install diffusers ninja wheel transformers accelerate sentencepiece protobuf && \
