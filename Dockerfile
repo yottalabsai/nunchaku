@@ -18,10 +18,14 @@ RUN mkdir -p /root/miniconda3 && \
 
 ENV PATH="/root/miniconda3/bin:$PATH"
 
-RUN echo "$SHELL" && \
-    conda create -n image python=3.12 && \
-    conda activate image && \
-    pip install torch torchvision torchaudio && \
+RUN conda create -n image python=3.12 && \
+    conda clean -afy
+
+ENV PATH="/root/miniconda3/envs/image/bin:$PATH"
+
+RUN python --version
+
+RUN pip install torch torchvision torchaudio && \
     pip install diffusers ninja wheel transformers accelerate sentencepiece protobuf && \
     pip install huggingface_hub peft opencv-python einops gradio spaces GPUtil && \
     conda install -c conda-forge gxx=11 gcc=11
