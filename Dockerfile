@@ -16,14 +16,15 @@ RUN mkdir -p /root/miniconda3 && \
 
 ENV PATH="/root/miniconda3/bin:$PATH"
 RUN conda init bash 
+RUN echo "source /root/.bashrc" >> ~/.bashrc
 
-RUN conda create -n image python=3.12 && \
-    conda activate image && \
+
+# 创建并激活 conda 环境
+RUN /bin/bash -c "source /root/.bashrc && conda create -n image python=3.12 && conda activate image && \
     pip install torch torchvision torchaudio && \
     pip install diffusers ninja wheel transformers accelerate sentencepiece protobuf && \
     pip install huggingface_hub peft opencv-python einops gradio spaces GPUtil && \
-    conda install -c conda-forge gxx=11 gcc=11
-
+    conda install -c conda-forge gxx=11 gcc=11"
 
 ENV MAX_JOBS=4
 
