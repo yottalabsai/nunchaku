@@ -23,8 +23,6 @@ RUN conda create -n image python=3.12 && \
 
 ENV PATH="/root/miniconda3/envs/image/bin:$PATH"
 
-RUN python --version
-
 RUN pip install torch torchvision torchaudio && \
     pip install diffusers ninja wheel transformers accelerate sentencepiece protobuf && \
     pip install huggingface_hub peft opencv-python einops gradio spaces GPUtil && \
