@@ -9,12 +9,12 @@ RUN apt-get update && \
     git \
     wget
 
-RUN mkdir -p ~/miniconda3 && \
-    wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh && \
-    bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3 && \
-    rm -rf ~/miniconda3/miniconda.sh
+RUN mkdir -p /root/miniconda3 && \
+    wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /root/miniconda3/miniconda.sh && \
+    bash /root/miniconda3/miniconda.sh -b -u -p /root/miniconda3 && \
+    rm -rf /root/miniconda3/miniconda.sh
 
-ENV PATH="~/miniconda3/bin:$PATH"
+ENV PATH="/root/miniconda3/bin:$PATH"
 RUN conda init bash 
 
 RUN conda create -n image python=3.12 && \
