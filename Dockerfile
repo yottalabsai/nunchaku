@@ -8,7 +8,8 @@ RUN apt-get update && \
     build-essential \
     cmake \
     git \
-    wget 
+    wget \
+    source
 
 
 
