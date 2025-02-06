@@ -8,8 +8,7 @@ RUN apt-get update && \
     build-essential \
     cmake \
     git \
-    wget \
-    source
+    wget
 
 
 
@@ -17,8 +16,8 @@ RUN mkdir -p ~/miniconda3 && \
     wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh && \
     bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3 && \
     rm -rf ~/miniconda3/miniconda.sh && \
-    ~/miniconda3/bin/conda init bash && \
-    source .bashrc
+    ~/miniconda3/bin/conda init bash
+
 
 RUN conda create -n image python=3.12 && \
     conda activate image && \
