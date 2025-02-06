@@ -12,12 +12,13 @@ RUN apt-get update && \
 RUN mkdir -p /root/miniconda3 && \
     wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /root/miniconda3/miniconda.sh && \
     bash /root/miniconda3/miniconda.sh -b -u -p /root/miniconda3 && \
-    rm -rf /root/miniconda3/miniconda.sh
+    rm -rf /root/miniconda3/miniconda.sh && \
+    . /root/miniconda3/etc/profile.d/conda.sh && \
+    conda init bash
 
 ENV PATH="/root/miniconda3/bin:$PATH"
 
-RUN conda init bash && \
-    conda create -n image python=3.12 && \
+RUN conda create -n image python=3.12 && \
     conda activate image && \
     pip install torch torchvision torchaudio && \
     pip install diffusers ninja wheel transformers accelerate sentencepiece protobuf && \
