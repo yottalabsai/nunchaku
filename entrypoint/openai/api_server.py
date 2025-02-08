@@ -66,11 +66,13 @@ async def imagesGenerations(req: CreateImageRequest, raw_req: Request) -> Respon
     """Ping check. Endpoint required for SageMaker"""
     state = raw_req.app.state
     prompt = req.prompt
+    is_safe_prompt = True
     logger.info(f"req: {req}")
     try:
         lora_name = state.lora_name
         if not state.safety_checker(prompt):
             prompt = "A peaceful world."
+            is_safe_prompt = False
             logger.info("Unsafe prompt detected")
         prompt = PROMPT_TEMPLATES[lora_name].format(prompt=prompt)
         start_time = time.time()
@@ -96,7 +98,7 @@ async def imagesGenerations(req: CreateImageRequest, raw_req: Request) -> Respon
 
     url = s3_util.upload_file_and_get_presigned_url(s3_client, bucket, object_name, image_bytes)
     if url is not None:
-        image_response = ImageResponse(url=url, latency=latency)
+        image_response = ImageResponse(url=url, latency=latency, is_safe_prompt=is_safe_prompt)
         result = BaseResponse(code=10000, message="success", data=[image_response])
     else:
         result = BaseResponse(code=10001, message="failed to generation image", data=[])    
