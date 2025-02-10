@@ -1,7 +1,6 @@
 import asyncio
 from io import BytesIO
 import json
-import logging
 import resource
 import signal
 import sys
@@ -66,15 +65,25 @@ async def imagesGenerations(req: CreateImageRequest, raw_req: Request) -> Respon
     """Ping check. Endpoint required for SageMaker"""
     state = raw_req.app.state
     prompt = req.prompt
+    is_safe_prompt = True
     logger.info(f"req: {req}")
     try:
         lora_name = state.lora_name
         if not state.safety_checker(prompt):
             prompt = "A peaceful world."
+            is_safe_prompt = False
             logger.info("Unsafe prompt detected")
         prompt = PROMPT_TEMPLATES[lora_name].format(prompt=prompt)
         start_time = time.time()
-        image = raw_req.app.state.pipeline(prompt, num_inference_steps=req.num_inference_steps, guidance_scale=req.guidance_scale).images[0]
+        pipeline = state.pipeline
+        image = pipeline(
+            prompt=prompt,
+            height=req.height,
+            width=req.width,
+            num_inference_steps=req.num_inference_steps,
+            guidance_scale=req.guidance_scale,
+            generator=torch.Generator().manual_seed(req.seed),
+        ).images[0]
         end_time = time.time()
         latency = end_time - start_time
         logger.info(f"start_time: {start_time}, end_time: {end_time}, latency: {latency}")
@@ -96,7 +105,7 @@ async def imagesGenerations(req: CreateImageRequest, raw_req: Request) -> Respon
 
     url = s3_util.upload_file_and_get_presigned_url(s3_client, bucket, object_name, image_bytes)
     if url is not None:
-        image_response = ImageResponse(url=url, latency=latency)
+        image_response = ImageResponse(url=url, latency=latency, is_safe_prompt=is_safe_prompt)
         result = BaseResponse(code=10000, message="success", data=[image_response])
     else:
         result = BaseResponse(code=10001, message="failed to generation image", data=[])    
@@ -265,7 +274,6 @@ def mark_args(parser: ArgumentParser) -> None:
         "--precision",
         type=str,
         default="int4",
-        nargs=1,
         choices=["int4", "bf16"],
         help="Which precisions to use",
     )
