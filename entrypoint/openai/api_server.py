@@ -1,7 +1,6 @@
 import asyncio
 from io import BytesIO
 import json
-import logging
 import resource
 import signal
 import sys
@@ -76,7 +75,15 @@ async def imagesGenerations(req: CreateImageRequest, raw_req: Request) -> Respon
             logger.info("Unsafe prompt detected")
         prompt = PROMPT_TEMPLATES[lora_name].format(prompt=prompt)
         start_time = time.time()
-        image = raw_req.app.state.pipeline(prompt, num_inference_steps=req.num_inference_steps, guidance_scale=req.guidance_scale).images[0]
+        pipeline = state.pipeline
+        image = pipeline(
+            prompt=prompt,
+            height=req.height,
+            width=req.width,
+            num_inference_steps=req.num_inference_steps,
+            guidance_scale=req.guidance_scale,
+            generator=torch.Generator().manual_seed(req.seed),
+        ).images[0]
         end_time = time.time()
         latency = end_time - start_time
         logger.info(f"start_time: {start_time}, end_time: {end_time}, latency: {latency}")
