@@ -236,7 +236,7 @@ def set_ulimit(target_soft_limit=65535):
                 "increasing with ulimit -n", current_soft, e)
 
 def generate_image(req: CreateImageRequest, raw_req: Request, prompt: str):
-    state = raw_req.state
+    state = raw_req.app.state
     model = state.model
     height = req.height if req.height == 0 else 1024
     width = req.width if req.width == 0 else 1024
@@ -245,6 +245,7 @@ def generate_image(req: CreateImageRequest, raw_req: Request, prompt: str):
         lora_name = state.lora_name
         prompt = PROMPT_TEMPLATES[lora_name].format(prompt=prompt)
         pipeline = state.pipeline
+        logger.info(f"generate_image: model={model}, prompt={prompt}, height={height}, width={width}, num_inference_steps={req.num_inference_steps}, guidance_scale={req.guidance_scale} seed={req.seed}")
         image = pipeline(
             prompt=prompt,
             height=height,
@@ -254,6 +255,7 @@ def generate_image(req: CreateImageRequest, raw_req: Request, prompt: str):
             generator=torch.Generator().manual_seed(req.seed),
         ).images[0]
     elif model in ["sana"]:
+        logger.info(f"generate_image: model={model}, prompt={prompt}, height={height}, width={width}, guidance_scale={req.guidance_scale}, pag_scale={pag_scale}, num_inference_steps={req.num_inference_steps}, seed={req.seed}")
         image = pipeline(
             prompt=prompt,
             height=height,
@@ -276,7 +278,6 @@ def read_config_json(file_path):
     prefix_path = os.getenv("prefix_path")
     aws_access_key_id = os.getenv("aws_access_key_id")
     aws_secret_access_key = os.getenv("aws_secret_access_key")
-    logger.info(f"bucket: {bucket}, prefix_path: {prefix_path}, aws_access_key_id: {aws_access_key_id}, aws_secret_access_key: {aws_secret_access_key}")
     if config is None:
         config = {
             "s3": {
