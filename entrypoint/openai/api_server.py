@@ -239,9 +239,9 @@ def generate_image(req: CreateImageRequest, raw_req: Request, prompt: str):
     state = raw_req.app.state
     model = state.model
     pipeline = state.pipeline
-    height = req.height if req.height == 0 else 1024
-    width = req.width if req.width == 0 else 1024
-    pag_scale = req.pag_scale if req.pag_scale == 0 else 2.0
+    height = req.height if req.height != 0 else 1024
+    width = req.width if req.width != 0 else 1024
+    pag_scale = req.pag_scale if req.pag_scale != 0 else 2.0
     if model in ["schnell", "dev"]:
         lora_name = state.lora_name
         prompt = PROMPT_TEMPLATES[lora_name].format(prompt=prompt)
