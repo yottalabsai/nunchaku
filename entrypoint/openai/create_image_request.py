@@ -11,3 +11,5 @@ class CreateImageRequest(BaseModel):
     lora_name: str = "None"
     lora_weight: float = 0.8
     seed: int = 0
+    # sana
+    pag_scale: float = 2.0

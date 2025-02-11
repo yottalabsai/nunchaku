@@ -1,10 +1,11 @@
-from diffusers import FluxPipeline
+from diffusers import FluxPipeline, SanaPAGPipeline
 import torch
 from peft.tuners import lora
 
 from entrypoint.openai.log import setup_logging
 from entrypoint.vars import LORA_PATHS, SVDQ_LORA_PATHS
 from nunchaku.models.transformer_flux import NunchakuFluxTransformer2dModel
+from nunchaku.models.transformer_sana import NunchakuSanaTransformer2DModel
 
 logger = setup_logging()
 
@@ -71,6 +72,25 @@ def get_pipeline(
                     if isinstance(m, lora.LoraLayer):
                         for name in m.scaling.keys():
                             m.scaling[name] = lora_weight
+    elif model_name == "sana":
+        if precision == "int4":
+            assert torch.device(device).type == "cuda", "int4 only supported on CUDA devices"
+            transformer = NunchakuSanaTransformer2DModel.from_pretrained("mit-han-lab/svdq-int4-sana-1600m", pag_layers=8)
+
+            pipeline_init_kwargs["transformer"] = transformer
+            if use_qencoder:
+                raise NotImplementedError("Quantized encoder not supported for Sana for now")
+        else:
+            assert precision == "bf16"
+        pipeline = SanaPAGPipeline.from_pretrained(
+            "Efficient-Large-Model/Sana_1600M_1024px_BF16_diffusers",
+            variant="bf16",
+            torch_dtype=torch.bfloat16,
+            pag_applied_layers="transformer_blocks.8",
+            **pipeline_init_kwargs
+        )
+        if precision == "int4":
+            pipeline._set_pag_attn_processor = lambda *args, **kwargs: None
     else:
         raise NotImplementedError(f"Model {model_name} not implemented")
     pipeline = pipeline.to(device)

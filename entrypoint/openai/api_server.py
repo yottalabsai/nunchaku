@@ -1,6 +1,7 @@
 import asyncio
 from io import BytesIO
 import json
+import os
 import resource
 import signal
 import sys
@@ -68,22 +69,12 @@ async def imagesGenerations(req: CreateImageRequest, raw_req: Request) -> Respon
     is_safe_prompt = True
     logger.info(f"req: {req}")
     try:
-        lora_name = state.lora_name
         if not state.safety_checker(prompt):
             prompt = "A peaceful world."
             is_safe_prompt = False
             logger.info("Unsafe prompt detected")
-        prompt = PROMPT_TEMPLATES[lora_name].format(prompt=prompt)
         start_time = time.time()
-        pipeline = state.pipeline
-        image = pipeline(
-            prompt=prompt,
-            height=req.height,
-            width=req.width,
-            num_inference_steps=req.num_inference_steps,
-            guidance_scale=req.guidance_scale,
-            generator=torch.Generator().manual_seed(req.seed),
-        ).images[0]
+        image = generate_image(req=req, raw_req=raw_req, prompt=prompt)
         end_time = time.time()
         latency = end_time - start_time
         logger.info(f"start_time: {start_time}, end_time: {end_time}, latency: {latency}")
@@ -244,9 +235,67 @@ def set_ulimit(target_soft_limit=65535):
                 "`OSError: [Errno 24] Too many open files`. Consider "
                 "increasing with ulimit -n", current_soft, e)
 
+def generate_image(req: CreateImageRequest, raw_req: Request, prompt: str):
+    state = raw_req.app.state
+    model = state.model
+    pipeline = state.pipeline
+    height = req.height if req.height != 0 else 1024
+    width = req.width if req.width != 0 else 1024
+    pag_scale = req.pag_scale if req.pag_scale != 0 else 2.0
+    if model in ["schnell", "dev"]:
+        lora_name = state.lora_name
+        prompt = PROMPT_TEMPLATES[lora_name].format(prompt=prompt)
+        logger.info(f"generate_image: model={model}, prompt={prompt}, height={height}, width={width}, num_inference_steps={req.num_inference_steps}, guidance_scale={req.guidance_scale} seed={req.seed}")
+        image = pipeline(
+            prompt=prompt,
+            height=height,
+            width=width,
+            num_inference_steps=req.num_inference_steps,
+            guidance_scale=req.guidance_scale,
+            generator=torch.Generator().manual_seed(req.seed),
+        ).images[0]
+    elif model in ["sana"]:
+        logger.info(f"generate_image: model={model}, prompt={prompt}, height={height}, width={width}, guidance_scale={req.guidance_scale}, pag_scale={pag_scale}, num_inference_steps={req.num_inference_steps}, seed={req.seed}")
+        image = pipeline(
+            prompt=prompt,
+            height=height,
+            width=width,
+            guidance_scale=req.guidance_scale,
+            pag_scale=pag_scale,
+            num_inference_steps=req.num_inference_steps,
+            generator=torch.Generator().manual_seed(req.seed),
+        ).images[0]
+    return image
+
 def read_config_json(file_path):
-    with open(file_path, 'r') as file:
-        config = json.load(file)
+    config = None
+    if os.path.exists(file_path):
+        logger.info(f"read config.json {file_path}")
+        with open(file_path, 'r') as file:
+            config = json.load(file)
+
+    bucket = os.getenv("bucket")
+    prefix_path = os.getenv("prefix_path")
+    aws_access_key_id = os.getenv("aws_access_key_id")
+    aws_secret_access_key = os.getenv("aws_secret_access_key")
+    if config is None:
+        config = {
+            "s3": {
+                "bucket": bucket,
+                "prefix_path": prefix_path,
+                "aws_access_key_id": aws_access_key_id,
+                "aws_secret_access_key": aws_secret_access_key
+            }
+        }
+    
+    if bucket is not None:
+        config["s3"]["bucket"] = bucket
+    if prefix_path is not None:
+        config["s3"]["prefix_path"] = prefix_path
+    if aws_access_key_id is not None:
+        config["s3"]["aws_access_key_id"] = aws_access_key_id
+    if aws_secret_access_key is not None:
+        config["s3"]["aws_secret_access_key"] = aws_secret_access_key        
     return config
 
 def init_app_state(app_state, pipeline, args):
@@ -267,7 +316,7 @@ def init_app_state(app_state, pipeline, args):
 
 def mark_args(parser: ArgumentParser) -> None:
     parser.add_argument(
-        "-m", "--model", type=str, default="schnell", choices=["schnell", "dev"], help="Which FLUX.1 model to use"
+        "-m", "--model", type=str, default="schnell", choices=["schnell", "dev", "sana"], help="Which model to use"
     )
     parser.add_argument(
         "-p",
