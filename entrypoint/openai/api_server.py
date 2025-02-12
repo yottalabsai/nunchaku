@@ -22,10 +22,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 import torch
 from create_image_request import CreateImageRequest
-from base_response import BaseResponse, ImageResponse
+from base_response import BaseResponse, HealthCheckResponse, ImageResponse
 from entrypoint import load_pipeline
 from entrypoint.openai.log import setup_logging
-from entrypoint.vars import PROMPT_TEMPLATES
+from entrypoint.vars import PROMPT_TEMPLATES, MODEL_MAPPINGS
 from nunchaku.models.safety_checker import SafetyChecker
 import s3_util  
 
@@ -54,7 +54,10 @@ async def lifespan(app: FastAPI):
 @router.get("/health")
 async def health(raw_request: Request) -> Response:
     """Health check."""
-    return Response(status_code=200)
+    state = raw_request.app.state
+    result = HealthCheckResponse(status="ok", model=state.model_name)
+    logger.info(f"Health check response {result.model_dump()}")
+    return JSONResponse(content=result.model_dump(), status_code=HTTPStatus.OK)
 
 @router.get("/version")
 async def show_version():
@@ -301,6 +304,7 @@ def read_config_json(file_path):
 def init_app_state(app_state, pipeline, args):
     app_state.model = args.model
     app_state.precision = args.precision
+    app_state.model_name = MODEL_MAPPINGS[app_state.model][app_state.precision]
     app_state.pipeline = pipeline
     app_state.lora_name = args.lora_name
     logger.info("read config.json")
