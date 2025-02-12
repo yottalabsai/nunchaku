@@ -138,3 +138,19 @@ STYLE_NAMES = list(STYLES.keys())
 
 MAX_SEED = 1000000000
 DEFAULT_SKETCH_GUIDANCE = 0.28
+
+
+MODEL_MAPPINGS = {
+    "schnell": {
+        "int4": "mit-han-lab/svdq-int4-flux.1-schnell",
+        "bf16": "black-forest-labs/FLUX.1-schnell"
+    },
+    "dev": {
+        "int4": "mit-han-lab/svdq-int4-flux.1-dev",
+        "bf16": "black-forest-labs/FLUX.1-dev"
+    },
+    "sana": {
+        "int4": "mit-han-lab/svdq-int4-sana-1600m",
+        "bf16": "Efficient-Large-Model/Sana_1600M_1024px_BF16_diffusers"
+    }
+}
