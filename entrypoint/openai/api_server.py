@@ -22,7 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 import torch
 from create_image_request import CreateImageRequest
-from base_response import BaseResponse, HealthCheckResponse, ImageResponse
+from base_response import BaseResponse, HealthCheckResponse, ImageResponse, ModelStatus
 from entrypoint import load_pipeline
 from entrypoint.openai.log import setup_logging
 from entrypoint.vars import PROMPT_TEMPLATES, MODEL_MAPPINGS
@@ -55,7 +55,8 @@ async def lifespan(app: FastAPI):
 async def health(raw_request: Request) -> Response:
     """Health check."""
     state = raw_request.app.state
-    result = HealthCheckResponse(status="ok", model=state.model_name)
+    model_status = ModelStatus(model=state.model_name, status="ok")
+    result = HealthCheckResponse(code=10000, message="success", data=model_status)
     logger.info(f"Health check response {result.model_dump()}")
     return JSONResponse(content=result.model_dump(), status_code=HTTPStatus.OK)
 

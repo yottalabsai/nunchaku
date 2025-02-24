@@ -11,6 +11,12 @@ class BaseResponse(BaseModel):
     message: str
     data: list[ImageResponse]
 
-class HealthCheckResponse(BaseModel):
+class ModelStatus(BaseModel):
     status: str
     model: str
+    
+class HealthCheckResponse(BaseModel):
+    code: int
+    message: str
+    data: ModelStatus
+
