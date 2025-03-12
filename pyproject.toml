@@ -21,4 +21,6 @@ dependencies = [
     "fastapi",
     "uvloop",
     "boto3",
+    "beautifulsoup4",
+    "python-dotenv",
 ]

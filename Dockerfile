@@ -7,7 +7,8 @@ RUN apt-get update && \
     build-essential \
     cmake \
     git \
-    wget
+    wget \
+    libgl1-mesa-glx
 
 RUN mkdir -p /root/miniconda3 && \
     wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /root/miniconda3/miniconda.sh && \
