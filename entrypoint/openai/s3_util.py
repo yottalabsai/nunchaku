@@ -2,12 +2,13 @@ import logging
 import boto3
 from botocore.exceptions import ClientError
 
-from entrypoint.openai.log import setup_logging
+from entrypoint.openai.protocol import S3Config
+from log import setup_logging
 
 logger = setup_logging()
 
-def get_s3_client(config):
-    s3_client = boto3.client('s3', aws_access_key_id = config['aws_access_key_id'], aws_secret_access_key = config['aws_secret_access_key'])
+def get_s3_client(config: S3Config):
+    s3_client = boto3.client('s3', aws_access_key_id = config.aws_access_key_id, aws_secret_access_key = config.aws_secret_access_key)
     return s3_client
 
 def upload_fileobj(s3_client, file, bucket, object_name):

@@ -21,13 +21,23 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 import torch
-from create_image_request import CreateImageRequest
-from base_response import BaseResponse, HealthCheckResponse, ImageResponse, ModelStatus
+from protocol import (
+    BaseResponse,
+    CreateImageRequest,
+    HealthCheckResponse,
+    ImageResponse,
+    ModelStatus,
+    Config,
+    S3Config,
+    GreenfieldConfig,
+)
 from entrypoint import load_pipeline
 from entrypoint.openai.log import setup_logging
 from entrypoint.vars import PROMPT_TEMPLATES, MODEL_MAPPINGS
 from nunchaku.models.safety_checker import SafetyChecker
 import s3_util  
+import saas_util
+from dotenv import load_dotenv
 
 VERSION = "1.0.0"
 TIMEOUT_KEEP_ALIVE = 180  # seconds
@@ -86,6 +96,9 @@ async def imagesGenerations(req: CreateImageRequest, raw_req: Request) -> Respon
         image_bytes = BytesIO()
         image.save(image_bytes, format="PNG")
         image_bytes.seek(0)
+        greenfield_bytes = BytesIO()
+        image.save(greenfield_bytes, format="PNG")
+        greenfield_bytes.seek(0)
     except Exception as e:
         logger.exception("imagesGenerations failed")
         result = BaseResponse(code=10001, message="failed to generation image", data=[])    
@@ -94,14 +107,15 @@ async def imagesGenerations(req: CreateImageRequest, raw_req: Request) -> Respon
         del image
         torch.cuda.empty_cache()
 
-    bucket = state.s3_bucket
-    object_name = state.s3_prefix_path + f"{state.model}-{state.precision}-{uuid.uuid4()}.png"
+    s3Config: S3Config = state.config.s3
+    object_name = s3Config.prefix_path + f"{state.model}-{state.precision}-{uuid.uuid4()}.png"
     s3_client = state.s3_client
 
-    url = s3_util.upload_file_and_get_presigned_url(s3_client, bucket, object_name, image_bytes)
+    url = s3_util.upload_file_and_get_presigned_url(s3_client, s3Config.bucket, object_name, image_bytes)
     if url is not None:
         image_response = ImageResponse(url=url, latency=latency, is_safe_prompt=is_safe_prompt)
         result = BaseResponse(code=10000, message="success", data=[image_response])
+        asyncio.create_task(saas_util.upload_fileobj_to_greenfield(greenfield_bytes, object_name, state.config.greenfield))
     else:
         result = BaseResponse(code=10001, message="failed to generation image", data=[])    
     return JSONResponse(content=result.model_dump(), status_code=HTTPStatus.OK)
@@ -271,35 +285,45 @@ def generate_image(req: CreateImageRequest, raw_req: Request, prompt: str):
         ).images[0]
     return image
 
-def read_config_json(file_path):
-    config = None
-    if os.path.exists(file_path):
-        logger.info(f"read config.json {file_path}")
-        with open(file_path, 'r') as file:
-            config = json.load(file)
+def read_config():
+    load_dotenv()
+    bucket = os.getenv("S3_BUCKET")
+    prefix_path = os.getenv("S3_PREFIX_PATH")
+    aws_access_key_id = os.getenv("S3_AWS_ACCESS_KEY_ID")
+    aws_secret_access_key = os.getenv("S3_AWS_SECRET_ACCESS_KEY")
+    greenfield_bucket = os.getenv("SAAS_GREENFIELD_BUCKET_NAME")
+    greenfield_api_key = os.getenv("SAAS_GREENFIELD_APIKEY")
+    greenfield_url = os.getenv("SAAS_GREENFIELD_URL")
 
-    bucket = os.getenv("bucket")
-    prefix_path = os.getenv("prefix_path")
-    aws_access_key_id = os.getenv("aws_access_key_id")
-    aws_secret_access_key = os.getenv("aws_secret_access_key")
-    if config is None:
-        config = {
-            "s3": {
-                "bucket": bucket,
-                "prefix_path": prefix_path,
-                "aws_access_key_id": aws_access_key_id,
-                "aws_secret_access_key": aws_secret_access_key
-            }
-        }
+    # Non-empty checks for environment variables
+    if not bucket:
+        raise ValueError("S3_BUCKET environment variable must be set and not empty.")
+    if not prefix_path:
+        raise ValueError("S3_PREFIX_PATH environment variable must be set and not empty.")
+    if not aws_access_key_id:
+        raise ValueError("S3_AWS_ACCESS_KEY_ID environment variable must be set and not empty.")
+    if not aws_secret_access_key:
+        raise ValueError("S3_AWS_SECRET_ACCESS_KEY environment variable must be set and not empty.")
+    if not greenfield_bucket:
+        raise ValueError("SAAS_GREENFIELD_BUCKET_NAME environment variable must be set and not empty.")
+    if not greenfield_api_key:
+        raise ValueError("SAAS_GREENFIELD_APIKEY environment variable must be set and not empty.")
+    if not greenfield_url:
+        raise ValueError("SAAS_GREENFIELD_URL environment variable must be set and not empty.")
     
-    if bucket is not None:
-        config["s3"]["bucket"] = bucket
-    if prefix_path is not None:
-        config["s3"]["prefix_path"] = prefix_path
-    if aws_access_key_id is not None:
-        config["s3"]["aws_access_key_id"] = aws_access_key_id
-    if aws_secret_access_key is not None:
-        config["s3"]["aws_secret_access_key"] = aws_secret_access_key        
+    s3 = S3Config(
+        bucket=bucket,
+        prefix_path=prefix_path,
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+    )
+
+    greenfield = GreenfieldConfig(
+        bucket_name=greenfield_bucket,
+        url=greenfield_url,
+        apikey=greenfield_api_key,
+    )
+    config = Config(s3=s3, greenfield=greenfield)
     return config
 
 def init_app_state(app_state, pipeline, args):
@@ -308,13 +332,10 @@ def init_app_state(app_state, pipeline, args):
     app_state.model_name = MODEL_MAPPINGS[app_state.model][app_state.precision]
     app_state.pipeline = pipeline
     app_state.lora_name = args.lora_name
-    logger.info("read config.json")
-    config = read_config_json('config.json')
+    logger.info("load config")
+    app_state.config = read_config()
     logger.info("get config done")
-    app_state.s3_config = config["s3"]
-    app_state.s3_client = s3_util.get_s3_client(app_state.s3_config)
-    app_state.s3_bucket = app_state.s3_config['bucket']
-    app_state.s3_prefix_path = app_state.s3_config["prefix_path"] + "/"
+    app_state.s3_client = s3_util.get_s3_client(app_state.config.s3)
     logger.info(f"start init safety checker {args.no_safety_checker}")
     app_state.safety_checker = SafetyChecker("cuda", disabled=args.no_safety_checker)
     logger.info("end init safety checker")
