@@ -39,7 +39,7 @@ class SafetyChecker:
                 response = requests.post(self.url, json=request_data.model_dump())
                 response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
                 safety_response = SafetyCheckResponse(**response.json())
-                return not safety_response.is_safe
+                return safety_response.is_safe
             except requests.exceptions.RequestException as e:
                 print(f"Error during request: {e}")
                 return False  # Return False in case of an error

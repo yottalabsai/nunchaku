@@ -181,7 +181,7 @@ async def serve_http(app: FastAPI, **uvicorn_kwargs: Any):
 
         logger.info("Route: %s, Methods: %s", path, ', '.join(methods))
 
-    config = uvicorn.Config(app, **uvicorn_kwargs)
+    config = uvicorn.Config(app, log_config=None, **uvicorn_kwargs)
     server = uvicorn.Server(config)
     _add_shutdown_handlers(app, server)
 

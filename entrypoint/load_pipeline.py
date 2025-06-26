@@ -18,6 +18,7 @@ def get_pipeline(
     pipeline_init_kwargs: dict = {},
 ) -> FluxPipeline:
     logger.info(f"Loading model {model_name} with precision {precision}, use_qencoder={use_qencoder}, lora_name={lora_name}, lora_weight={lora_weight}, device={device}")
+    pipeline_init_kwargs["device_map"] = "balanced"
     if model_name == "schnell":
         if precision == "int4":
             assert torch.device(device).type == "cuda", "int4 only supported on CUDA devices"
@@ -92,6 +93,6 @@ def get_pipeline(
             pipeline._set_pag_attn_processor = lambda *args, **kwargs: None
     else:
         raise NotImplementedError(f"Model {model_name} not implemented")
-    pipeline = pipeline.to(device)
+    # pipeline = pipeline.to(device)
 
     return pipeline
