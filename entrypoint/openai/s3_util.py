@@ -3,9 +3,8 @@ import boto3
 from botocore.exceptions import ClientError
 
 from entrypoint.openai.protocol import S3Config
-from log import setup_logging
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 def get_s3_client(config: S3Config):
     s3_client = boto3.client('s3', aws_access_key_id = config.aws_access_key_id, aws_secret_access_key = config.aws_secret_access_key)

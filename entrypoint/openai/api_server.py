@@ -1,6 +1,7 @@
 import asyncio
 from io import BytesIO
 import json
+import logging
 import os
 import resource
 import signal
@@ -35,7 +36,7 @@ from entrypoint import load_pipeline
 from entrypoint.openai.log import setup_logging
 from entrypoint.vars import PROMPT_TEMPLATES, MODEL_MAPPINGS
 from nunchaku.models.safety_checker import SafetyChecker
-import s3_util  
+import s3_util
 import saas_util
 from dotenv import load_dotenv
 
@@ -45,7 +46,9 @@ TIMEOUT_KEEP_ALIVE = 180  # seconds
 prometheus_multiproc_dir: tempfile.TemporaryDirectory
 
 # Cannot use __name__ (https://github.com/vllm-project/vllm/pull/4765)
-logger = setup_logging()
+setup_logging()
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -100,7 +103,7 @@ async def imagesGenerations(req: CreateImageRequest, raw_req: Request) -> Respon
         image.save(greenfield_bytes, format="PNG")
         greenfield_bytes.seek(0)
     except Exception as e:
-        logger.exception("imagesGenerations failed")
+        logger.exception(f"imagesGenerations failed: {e}")
         result = BaseResponse(code=10001, message="failed to generation image", data=[])    
         return JSONResponse(content=result.model_dump(), status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
     finally:
@@ -294,6 +297,7 @@ def read_config():
     greenfield_bucket = os.getenv("SAAS_GREENFIELD_BUCKET_NAME")
     greenfield_api_key = os.getenv("SAAS_GREENFIELD_APIKEY")
     greenfield_url = os.getenv("SAAS_GREENFIELD_URL")
+    safe_check_url = os.getenv("SAFE_CHECK_URL")
 
     # Non-empty checks for environment variables
     if not bucket:
@@ -323,7 +327,7 @@ def read_config():
         url=greenfield_url,
         apikey=greenfield_api_key,
     )
-    config = Config(s3=s3, greenfield=greenfield)
+    config = Config(s3=s3, greenfield=greenfield, safe_check_url=safe_check_url)
     return config
 
 def init_app_state(app_state, pipeline, args):
@@ -337,7 +341,7 @@ def init_app_state(app_state, pipeline, args):
     logger.info("get config done")
     app_state.s3_client = s3_util.get_s3_client(app_state.config.s3)
     logger.info(f"start init safety checker {args.no_safety_checker}")
-    app_state.safety_checker = SafetyChecker("cuda", disabled=args.no_safety_checker)
+    app_state.safety_checker = SafetyChecker(device="cuda", url=app_state.config.safe_check_url, disabled=args.no_safety_checker)
     logger.info("end init safety checker")
 
 def mark_args(parser: ArgumentParser) -> None:

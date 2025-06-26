@@ -1,10 +1,11 @@
 from io import BytesIO
+import logging
 import requests
 
 from entrypoint.openai.protocol import GreenfieldConfig
-from log import setup_logging
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
+
 async def upload_fileobj_to_greenfield(file: BytesIO, object_name: str, config: GreenfieldConfig):
     try:
         file.seek(0)

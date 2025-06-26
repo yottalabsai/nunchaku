@@ -19,6 +19,10 @@ class ObjectCreateRequest(BaseModel):
     storageSource: str
     objectName: str
 
+#### safe check request ####
+# Define a request model for the /safety/check/prompt endpoint
+class SafeCheckPromptRequest(BaseModel):
+    prompt: str
 
 ########################### request ########################
 
@@ -43,6 +47,11 @@ class HealthCheckResponse(BaseModel):
     message: str
     data: ModelStatus
 
+# Define a response model for the /safety/check/prompt endpoint
+class SafetyCheckResponse(BaseModel):
+    prompt: str
+    is_safe: bool
+
 ########################### response ########################
 
 
@@ -61,4 +70,5 @@ class S3Config(BaseModel):
 class Config(BaseModel):
     greenfield: GreenfieldConfig
     s3: S3Config
+    safe_check_url: str
 ########################### config ########################

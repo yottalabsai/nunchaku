@@ -1,14 +1,13 @@
+import logging
 from diffusers import FluxPipeline, SanaPAGPipeline
 import torch
 from peft.tuners import lora
 
-from entrypoint.openai.log import setup_logging
 from entrypoint.vars import LORA_PATHS, SVDQ_LORA_PATHS
 from nunchaku.models.transformer_flux import NunchakuFluxTransformer2dModel
 from nunchaku.models.transformer_sana import NunchakuSanaTransformer2DModel
 
-logger = setup_logging()
-
+logger = logging.getLogger(__name__)
 def get_pipeline(
     model_name: str,
     precision: str,
