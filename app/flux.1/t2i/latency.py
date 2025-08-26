@@ -4,7 +4,6 @@ import time
 import torch
 from torch import nn
 from tqdm import trange
-
 from utils import get_pipeline
 
 
@@ -14,7 +13,7 @@ def get_args() -> argparse.Namespace:
         "-m", "--model", type=str, default="schnell", choices=["schnell", "dev"], help="Which FLUX.1 model to use"
     )
     parser.add_argument(
-        "-p", "--precision", type=str, default="int4", choices=["int4", "bf16"], help="Which precision to use"
+        "-p", "--precision", type=str, default="int4", choices=["int4", "fp4", "bf16"], help="Which precision to use"
     )
 
     parser.add_argument("-t", "--num-inference-steps", type=int, default=4, help="Number of inference steps")
@@ -55,7 +54,7 @@ def main():
                 prompt=dummy_prompt, num_inference_steps=args.num_inference_steps, guidance_scale=args.guidance_scale
             )
             torch.cuda.synchronize()
-        for _ in trange(args.test_times, desc="Warmup", position=0, leave=False):
+        for _ in trange(args.test_times, desc="Test", position=0, leave=False):
             start_time = time.time()
             pipeline(
                 prompt=dummy_prompt, num_inference_steps=args.num_inference_steps, guidance_scale=args.guidance_scale
@@ -72,17 +71,20 @@ def main():
 
         pipeline.transformer.register_forward_pre_hook(get_input_hook, with_kwargs=True)
 
-        pipeline(prompt=dummy_prompt, num_inference_steps=1, guidance_scale=args.guidance_scale, output_type="latent")
+        with torch.no_grad():
+            pipeline(
+                prompt=dummy_prompt, num_inference_steps=1, guidance_scale=args.guidance_scale, output_type="latent"
+            )
 
-        for _ in trange(args.warmup_times, desc="Warmup", position=0, leave=False):
-            pipeline.transformer(*inputs["args"], **inputs["kwargs"])
-            torch.cuda.synchronize()
-        for _ in trange(args.test_times, desc="Warmup", position=0, leave=False):
-            start_time = time.time()
-            pipeline.transformer(*inputs["args"], **inputs["kwargs"])
-            torch.cuda.synchronize()
-            end_time = time.time()
-            latency_list.append(end_time - start_time)
+            for _ in trange(args.warmup_times, desc="Warmup", position=0, leave=False):
+                pipeline.transformer(*inputs["args"], **inputs["kwargs"])
+                torch.cuda.synchronize()
+            for _ in trange(args.test_times, desc="Warmup", position=0, leave=False):
+                start_time = time.time()
+                pipeline.transformer(*inputs["args"], **inputs["kwargs"])
+                torch.cuda.synchronize()
+                end_time = time.time()
+                latency_list.append(end_time - start_time)
 
     latency_list = sorted(latency_list)
     ignored_count = int(args.ignore_ratio * len(latency_list) / 2)

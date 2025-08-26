@@ -1,9 +1,10 @@
 import torch
 from diffusers import FluxPipeline
 from peft.tuners import lora
-
-from nunchaku.models.transformer_flux import NunchakuFluxTransformer2dModel
 from vars import LORA_PATHS, SVDQ_LORA_PATHS
+
+from nunchaku import NunchakuFluxTransformer2dModel
+from nunchaku.models.transformers.transformer_flux_v2 import NunchakuFluxTransformer2DModelV2
 
 
 def hash_str_to_int(s: str) -> int:
@@ -25,31 +26,55 @@ def get_pipeline(
     pipeline_init_kwargs: dict = {},
 ) -> FluxPipeline:
     if model_name == "schnell":
-        if precision == "int4":
+        if precision in ["int4", "fp4"]:
             assert torch.device(device).type == "cuda", "int4 only supported on CUDA devices"
-            transformer = NunchakuFluxTransformer2dModel.from_pretrained("mit-han-lab/svdq-int4-flux.1-schnell")
+            if precision == "int4":
+                transformer = NunchakuFluxTransformer2dModel.from_pretrained(
+                    "mit-han-lab/nunchaku-flux.1-schnell/svdq-int4_r32-flux.1-schnell.safetensors"
+                )
+            else:
+                assert precision == "fp4"
+                transformer = NunchakuFluxTransformer2dModel.from_pretrained(
+                    "mit-han-lab/nunchaku-flux.1-schnell/svdq-fp4_r32-flux.1-schnell.safetensors", precision="fp4"
+                )
             pipeline_init_kwargs["transformer"] = transformer
             if use_qencoder:
-                from nunchaku.models.text_encoder import NunchakuT5EncoderModel
+                from nunchaku.models.text_encoders.t5_encoder import NunchakuT5EncoderModel
 
-                text_encoder_2 = NunchakuT5EncoderModel.from_pretrained("mit-han-lab/svdq-flux.1-t5")
+                text_encoder_2 = NunchakuT5EncoderModel.from_pretrained(
+                    "mit-han-lab/nunchaku-t5/awq-int4-flux.1-t5xxl.safetensors"
+                )
                 pipeline_init_kwargs["text_encoder_2"] = text_encoder_2
         else:
             assert precision == "bf16"
         pipeline = FluxPipeline.from_pretrained(
             "black-forest-labs/FLUX.1-schnell", torch_dtype=torch.bfloat16, **pipeline_init_kwargs
         )
+    elif model_name == "schnell_v2":
+        transformer = NunchakuFluxTransformer2DModelV2.from_pretrained(
+            f"mit-han-lab/nunchaku-flux.1-schnell/svdq-{precision}_r32-flux.1-schnell.safetensors"
+        )
+        pipeline = FluxPipeline.from_pretrained(
+            "black-forest-labs/FLUX.1-schnell",
+            transformer=transformer,
+            torch_dtype=torch.bfloat16,
+            **pipeline_init_kwargs,
+        )
     elif model_name == "dev":
         if precision == "int4":
-            transformer = NunchakuFluxTransformer2dModel.from_pretrained("mit-han-lab/svdq-int4-flux.1-dev")
+            transformer = NunchakuFluxTransformer2dModel.from_pretrained(
+                "mit-han-lab/nunchaku-flux.1-dev/svdq-int4_r32-flux.1-dev.safetensors"
+            )
             if lora_name not in ["All", "None"]:
                 transformer.update_lora_params(SVDQ_LORA_PATHS[lora_name])
                 transformer.set_lora_strength(lora_weight)
             pipeline_init_kwargs["transformer"] = transformer
             if use_qencoder:
-                from nunchaku.models.text_encoder import NunchakuT5EncoderModel
+                from nunchaku.models.text_encoders.t5_encoder import NunchakuT5EncoderModel
 
-                text_encoder_2 = NunchakuT5EncoderModel.from_pretrained("mit-han-lab/svdq-flux.1-t5")
+                text_encoder_2 = NunchakuT5EncoderModel.from_pretrained(
+                    "mit-han-lab/nunchaku-t5/awq-int4-flux.1-t5xxl.safetensors"
+                )
                 pipeline_init_kwargs["text_encoder_2"] = text_encoder_2
             pipeline = FluxPipeline.from_pretrained(
                 "black-forest-labs/FLUX.1-dev", torch_dtype=torch.bfloat16, **pipeline_init_kwargs
@@ -79,6 +104,9 @@ def get_pipeline(
                             m.scaling[name] = lora_weight
     else:
         raise NotImplementedError(f"Model {model_name} not implemented")
-    pipeline = pipeline.to(device)
+    if precision == "bf16":
+        pipeline.enable_model_cpu_offload()
+    else:
+        pipeline = pipeline.to(device)
 
     return pipeline

@@ -1,18 +1,20 @@
-[build-system]
-requires = [
-    "setuptools",
-    "torch",
-    "wheel",
-    "ninja",
-]
-build-backend = "setuptools.build_meta"
+[tool.isort]
+profile = "black"
+known_first_party = ["nunchaku"]
+line_length = 120
+
+[tool.black]
+line-length = 120
+target-version = ['py311']
+
+[tool.ruff]
+line-length = 120
 
 [project]
 dynamic = ["version"]
 name = "nunchaku"
 dependencies = [
-    "torch>=2.4.1",
-    "diffusers>=0.30.3",
+    "diffusers>=0.32.2",
     "transformers",
     "accelerate",
     "sentencepiece",
@@ -24,3 +26,25 @@ dependencies = [
     "beautifulsoup4",
     "python-dotenv",
 ]
+requires-python = ">=3.10"
+
+[build-system]
+requires = [
+    "setuptools",
+    "torch>=2.5",
+    "wheel",
+    "ninja",
+]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["nunchaku"]
+
+[tool.doc8]
+max-line-length = 120
+ignore-path = ["docs/_build"]
+ignore = ["D000", "D001"]
+
+[tool.rstcheck]
+ignore_directives = ["tabs"]
+ignore_messages = ["ERROR/3", "INFO/1"]

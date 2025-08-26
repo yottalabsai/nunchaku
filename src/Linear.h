@@ -36,6 +36,8 @@ public:
     int lora_rank;
     float lora_scale;
 
+    const Device device;
+
 public:
     Tensor qweight;
     Tensor wscales;
@@ -64,12 +66,22 @@ public:
     };
 
 public:
-    GEMM_W4A4(int in_features, int out_features, bool bias, Tensor::ScalarType dtype, Device device);
+    GEMM_W4A4(int in_features, int out_features, bool bias, bool use_fp4, Tensor::ScalarType dtype, Device device);
     Tensor forward(Tensor x);
     Tensor forward_silu(Tensor x);
     std::variant<Tensor, QuantizedActivation> forward(Tensor x, FuseOptions fuse, GEMM_W4A4 *nextGEMM = nullptr);
-    void forward(Tensor x, Tensor out, Tensor pool = {}, Tensor norm_q = {}, Tensor norm_k = {}, Tensor rotary_emb = {});
-    std::variant<Tensor, QuantizedActivation> forward_quant(QuantizedActivation qact, FuseOptions fuse, GEMM_W4A4 *nextGEMM = nullptr);
+    void forward(Tensor x,
+                 Tensor out,
+                 Tensor pool       = {},
+                 Tensor norm_q     = {},
+                 Tensor norm_k     = {},
+                 Tensor rotary_emb = {},
+                 Tensor out_q      = {},
+                 Tensor out_k      = {},
+                 Tensor out_v      = {},
+                 int numTokens     = 0);
+    std::variant<Tensor, QuantizedActivation>
+    forward_quant(QuantizedActivation qact, FuseOptions fuse, GEMM_W4A4 *nextGEMM = nullptr);
     Tensor forward_quant(QuantizedActivation qact);
 
 public:
@@ -80,11 +92,13 @@ public:
     const int out_features;
     const int in_features_pad;
     const int out_features_pad;
-    
+    const bool use_fp4;
+
     int lora_rank;
     std::vector<float> lora_scales; // every 16 ranks share a scale
 
     const Tensor::ScalarType dtype;
+    const Device device;
 
 protected:
     virtual void loadParam(std::string key, Tensor &dst, Tensor src) override;
@@ -99,6 +113,9 @@ public:
 
     Tensor smooth;
 
+    Tensor wtscale;
+    Tensor wcscales;
+
     cublasHandle_t handle;
 };
 
@@ -108,13 +125,16 @@ public:
         Tensor act;
         Tensor ascales;
     };
+
 public:
     GEMM_W8A8(int in_features, int out_features, bool bias, Tensor::ScalarType dtype, Device device);
 
 public:
-    QuantizedActivation quantize(Tensor x, bool fuse_glu); 
+    QuantizedActivation quantize(Tensor x, bool fuse_glu);
     Tensor forward_quant(QuantizedActivation qact);
-    Tensor forward(Tensor x) { return forward_quant(quantize(x, false)); }
+    Tensor forward(Tensor x) {
+        return forward_quant(quantize(x, false));
+    }
 
 public:
     const int in_features;

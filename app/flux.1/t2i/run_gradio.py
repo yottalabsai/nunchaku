@@ -5,17 +5,16 @@ import random
 import time
 from datetime import datetime
 
-import GPUtil
 import spaces
 import torch
 from peft.tuners import lora
+from utils import get_pipeline
+from vars import DEFAULT_HEIGHT, DEFAULT_WIDTH, EXAMPLES, LORA_PATHS, MAX_SEED, PROMPT_TEMPLATES
 
 from nunchaku.models.safety_checker import SafetyChecker
-from utils import get_pipeline
-from vars import DEFAULT_HEIGHT, DEFAULT_WIDTH, EXAMPLES, MAX_SEED, PROMPT_TEMPLATES, SVDQ_LORA_PATHS
 
 # import gradio last to avoid conflicts with other imports
-import gradio as gr
+import gradio as gr  # noqa: isort: skip
 
 
 def get_args() -> argparse.Namespace:
@@ -29,12 +28,13 @@ def get_args() -> argparse.Namespace:
         type=str,
         default=["int4"],
         nargs="*",
-        choices=["int4", "bf16"],
+        choices=["int4", "fp4", "bf16"],
         help="Which precisions to use",
     )
     parser.add_argument("--use-qencoder", action="store_true", help="Whether to use 4-bit text encoder")
     parser.add_argument("--no-safety-checker", action="store_true", help="Disable safety checker")
     parser.add_argument("--count-use", action="store_true", help="Whether to count the number of uses")
+    parser.add_argument("--gradio-root-path", type=str, default="")
     return parser.parse_args()
 
 
@@ -83,7 +83,7 @@ def generate(
     images, latency_strs = [], []
     for i, pipeline in enumerate(pipelines):
         precision = args.precisions[i]
-        progress = gr.Progress(track_tqdm=True)
+        gr.Progress(track_tqdm=True)
         if pipeline.cur_lora_name != lora_name:
             if precision == "bf16":
                 for m in pipeline.transformer.modules():
@@ -97,7 +97,9 @@ def generate(
             else:
                 assert precision == "int4"
                 if lora_name != "None":
-                    pipeline.transformer.update_lora_params(SVDQ_LORA_PATHS[lora_name])
+                    lora_path = LORA_PATHS[lora_name]
+                    lora_path = os.path.join(lora_path["name_or_path"], lora_path["weight_name"])
+                    pipeline.transformer.update_lora_params(lora_path)
                     pipeline.transformer.set_lora_strength(lora_weight)
                 else:
                     pipeline.transformer.set_lora_strength(0)
@@ -156,14 +158,16 @@ def generate(
 
 with open("./assets/description.html", "r") as f:
     DESCRIPTION = f.read()
-gpus = GPUtil.getGPUs()
-if len(gpus) > 0:
-    gpu = gpus[0]
-    memory = gpu.memoryTotal / 1024
-    device_info = f"Running on {gpu.name} with {memory:.0f} GiB memory."
+
+# Get the GPU properties
+if torch.cuda.device_count() > 0:
+    gpu_properties = torch.cuda.get_device_properties(0)
+    gpu_memory = gpu_properties.total_memory / (1024**3)  # Convert to GiB
+    gpu_name = torch.cuda.get_device_name(0)
+    device_info = f"Running on {gpu_name} with {gpu_memory:.0f} GiB memory."
 else:
     device_info = "Running on CPU 🥶 This demo does not work on CPU."
-notice = f'<strong>Notice:</strong>&nbsp;We will replace unsafe prompts with a default prompt: "A peaceful world."'
+notice = '<strong>Notice:</strong>&nbsp;We will replace unsafe prompts with a default prompt: "A peaceful world."'
 
 with gr.Blocks(
     css_paths=[f"assets/frame{len(args.precisions)}.css", "assets/common.css"],
@@ -262,7 +266,7 @@ with gr.Blocks(
         fn=generate_func,
         inputs=input_args,
         outputs=[*image_results, *latency_results],
-        api_name="run",
+        api_name=False,
     )
     randomize_seed.click(
         lambda: random.randint(0, MAX_SEED), inputs=[], outputs=seed, api_name=False, queue=False
@@ -275,11 +279,9 @@ with gr.Blocks(
             outputs=[prompt_template],
             api_name=False,
             queue=False,
-        ).then(
-            fn=generate_func, inputs=input_args, outputs=[*image_results, *latency_results], api_name=False, queue=False
         )
     gr.Markdown("MIT Accessibility: https://accessibility.mit.edu/", elem_id="accessibility")
 
 
 if __name__ == "__main__":
-    demo.queue(max_size=20).launch(server_name="0.0.0.0", debug=True, share=True)
+    demo.queue(max_size=20).launch(server_name="0.0.0.0", debug=True, share=True, root_path=args.gradio_root_path)

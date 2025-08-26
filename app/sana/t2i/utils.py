@@ -1,7 +1,7 @@
 import torch
 from diffusers import SanaPAGPipeline
 
-from nunchaku.models.transformer_sana import NunchakuSanaTransformer2DModel
+from nunchaku.models.transformers.transformer_sana import NunchakuSanaTransformer2DModel
 
 
 def hash_str_to_int(s: str) -> int:
@@ -30,7 +30,7 @@ def get_pipeline(
         variant="bf16",
         torch_dtype=torch.bfloat16,
         pag_applied_layers="transformer_blocks.8",
-        **pipeline_init_kwargs
+        **pipeline_init_kwargs,
     )
     if precision == "int4":
         pipeline._set_pag_attn_processor = lambda *args, **kwargs: None

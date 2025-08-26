@@ -2,7 +2,6 @@ import argparse
 import os
 
 import torch
-
 from utils import get_pipeline
 from vars import PROMPT_TEMPLATES
 
@@ -13,7 +12,7 @@ def get_args() -> argparse.Namespace:
         "-m", "--model", type=str, default="schnell", choices=["schnell", "dev"], help="Which FLUX.1 model to use"
     )
     parser.add_argument(
-        "-p", "--precision", type=str, default="int4", choices=["int4", "bf16"], help="Which precision to use"
+        "-p", "--precision", type=str, default="int4", choices=["int4", "fp4", "bf16"], help="Which precision to use"
     )
     parser.add_argument(
         "--prompt", type=str, default="A cat holding a sign that says hello world", help="Prompt for the image"

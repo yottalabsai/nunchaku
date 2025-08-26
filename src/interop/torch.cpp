@@ -22,18 +22,22 @@ Tensor from_torch(at::Tensor input) {
     }
 
     static const std::map<at::ScalarType, Tensor::ScalarType> mapType = {
-        { at::ScalarType::Byte, Tensor::INT8 },
-        { at::ScalarType::Int, Tensor::INT32 },
-        { at::ScalarType::Long, Tensor::INT64 },
-        { at::ScalarType::Float, Tensor::FP32 },
-        { at::ScalarType::Half, Tensor::FP16 },
-        { at::ScalarType::BFloat16, Tensor::BF16 },
+        {at::ScalarType::Char, Tensor::INT8},
+        {at::ScalarType::Byte, Tensor::INT8},
+        {at::ScalarType::Int, Tensor::INT32},
+        {at::ScalarType::Long, Tensor::INT64},
+        {at::ScalarType::Float, Tensor::FP32},
+        {at::ScalarType::Half, Tensor::FP16},
+        {at::ScalarType::BFloat16, Tensor::BF16},
+        {at::ScalarType::Short, Tensor::INT16},
+        {at::ScalarType::Float8_e4m3fn, Tensor::FP8_E4M3},
+        {at::ScalarType::Float8_e5m2, Tensor::FP8_E5M2},
     };
 
     result.scalarType = mapType.at(input.scalar_type());
-    result.buffer = std::make_shared<BufferTorchTensor>(std::move(input));
+    result.buffer     = std::make_shared<BufferTorchTensor>(std::move(input));
 
-    // Tensor::lockBuffer(result.buffer, getCurrentCUDAStream());
+    Tensor::lockBuffer(result.buffer, getCurrentCUDAStream());
 
     return result;
 }
@@ -47,12 +51,15 @@ at::Tensor to_torch(Tensor input) {
     }
 
     static const std::map<Tensor::ScalarType, at::ScalarType> mapType = {
-        { Tensor::INT8, at::ScalarType::Byte  },
-        { Tensor::INT32, at::ScalarType::Int  },
-        { Tensor::INT64, at::ScalarType::Long  },
-        { Tensor::FP32, at::ScalarType::Float  },
-        { Tensor::FP16, at::ScalarType::Half  },
-        { Tensor::BF16, at::ScalarType::BFloat16  },
+        {Tensor::INT8, at::ScalarType::Byte},
+        {Tensor::INT32, at::ScalarType::Int},
+        {Tensor::INT64, at::ScalarType::Long},
+        {Tensor::FP32, at::ScalarType::Float},
+        {Tensor::FP16, at::ScalarType::Half},
+        {Tensor::BF16, at::ScalarType::BFloat16},
+        {Tensor::INT16, at::ScalarType::Short},
+        {Tensor::FP8_E4M3, at::ScalarType::Float8_e4m3fn},
+        {Tensor::FP8_E5M2, at::ScalarType::Float8_e5m2},
     };
 
     c10::TensorOptions opts(mapType.at(input.scalar_type()));

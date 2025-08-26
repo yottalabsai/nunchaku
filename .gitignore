@@ -103,6 +103,8 @@ instance/
 
 # Sphinx documentation
 docs/_build/
+docs/build/
+docs/doxygen/
 
 # PyBuilder
 .pybuilder/
@@ -203,3 +205,14 @@ cython_debug/
 *.pt
 *.nsys-rep
 *.ncu-rep
+
+# Pulid
+*.safetensors
+*.onnx
+.gitattributes
+nunchaku-models/
+*.png
+
+dev/
+.tmp/
+metrics.json

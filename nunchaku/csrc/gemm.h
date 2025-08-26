@@ -8,15 +8,20 @@
 
 class QuantizedGEMM : public ModuleWrapper<GEMM_W4A4> {
 public:
-    void init(int64_t in_features, int64_t out_features, bool bias, bool bf16, int8_t deviceId) {
+    void init(int64_t in_features, int64_t out_features, bool bias, bool use_fp4, bool bf16, int8_t deviceId) {
         spdlog::info("Initializing QuantizedGEMM");
-        
+
         size_t val = 0;
         checkCUDA(cudaDeviceSetLimit(cudaLimitStackSize, 8192));
         checkCUDA(cudaDeviceGetLimit(&val, cudaLimitStackSize));
         spdlog::debug("Stack={}", val);
 
-        net = std::make_unique<GEMM_W4A4>((int)in_features, (int)out_features, bias, bf16 ? Tensor::BF16 : Tensor::FP16, Device::cuda((int)deviceId));
+        net = std::make_unique<GEMM_W4A4>((int)in_features,
+                                          (int)out_features,
+                                          bias,
+                                          use_fp4,
+                                          bf16 ? Tensor::BF16 : Tensor::FP16,
+                                          Device::cuda((int)deviceId));
     }
 
     torch::Tensor forward(torch::Tensor x) {
@@ -27,7 +32,7 @@ public:
         x = x.contiguous();
 
         Tensor result = net->forward(from_torch(x));
-        
+
         torch::Tensor output = to_torch(result);
         Tensor::synchronizeDevice();
 
@@ -48,16 +53,16 @@ public:
 
         const int M = x.shape[0];
         const int K = x.shape[1] * 2;
-        
+
         assert(x.dtype() == Tensor::INT8);
 
         // activation: row major, [M / BLOCK_M, K / WARP_K, NUM_WARPS, WARP_M_TILES, WARP_SIZE] of packed_act_t (uint4)
 
-        constexpr int BLOCK_M = 256;
-        constexpr int WARP_K = 64;
-        constexpr int NUM_WARPS = 8;
+        constexpr int BLOCK_M      = 256;
+        constexpr int WARP_K       = 64;
+        constexpr int NUM_WARPS    = 8;
         constexpr int WARP_M_TILES = 2;
-        constexpr int WARP_SIZE = 32;
+        constexpr int WARP_SIZE    = 32;
 
         std::stringstream ss;
         for (int bm = 0; bm < M / BLOCK_M; bm++) {
@@ -67,7 +72,7 @@ public:
                     const int offset = ((bm * (K / WARP_K) + bn) * NUM_WARPS + warpId) * WARP_M_TILES * WARP_SIZE * 4;
 
                     for (int i = 0; i < 16; i++) {
-                        assert(offset + i < x.numel() / 4);
+                        assert(static_cast<size_t>(offset + i) < x.numel() / 4);
                         uint32_t val = x.data_ptr<uint32_t>()[offset + i];
                         ss << "{";
                         for (int j = 0; j < 8; j++) {
@@ -83,7 +88,7 @@ public:
                 }
             }
         }
-        
+
         ss << std::endl;
         return ss.str();
     }
@@ -95,13 +100,10 @@ public:
 
         x = x.contiguous();
 
-        auto qout = net->quantize(
-            from_torch(x),
-            fuse_glu
-        );
-        
-        Tensor act = qout.act.copy(Device::cpu());
-        Tensor ascales = qout.ascales.copy(Device::cpu());
+        auto qout = net->quantize(from_torch(x), fuse_glu);
+
+        Tensor act      = qout.act.copy(Device::cpu());
+        Tensor ascales  = qout.ascales.copy(Device::cpu());
         Tensor lora_act = qout.lora_act.copy(Device::cpu());
 
         Tensor::synchronizeDevice();
@@ -109,5 +111,4 @@ public:
         spdlog::debug("act = {}", dumpTensorINT4(act));
         spdlog::debug("ascales = {}", dumpTensorBF16(ascales));
     }
-
 };

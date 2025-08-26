@@ -36,7 +36,7 @@ LORA_PATHS = {
     },
 }
 
-SVDQ_LORA_PATH_FORMAT = "mit-han-lab/svdquant-models/svdq-flux.1-dev-lora-{name}.safetensors"
+SVDQ_LORA_PATH_FORMAT = "mit-han-lab/svdquant-lora-collection/svdq-int4-flux.1-dev-{name}.safetensors"
 SVDQ_LORA_PATHS = {
     "Anime": SVDQ_LORA_PATH_FORMAT.format(name="anime"),
     "GHIBSKY Illustration": SVDQ_LORA_PATH_FORMAT.format(name="ghibsky"),

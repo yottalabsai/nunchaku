@@ -1,7 +1,14 @@
 import os
+import re
+import subprocess
+import sys
+from datetime import date
 
 import setuptools
-from torch.utils.cpp_extension import BuildExtension, CUDAExtension
+import torch
+from packaging import version as packaging_version
+from torch.utils.cpp_extension import CUDA_HOME, BuildExtension, CUDAExtension
+
 
 class CustomBuildExtension(BuildExtension):
     def build_extensions(self):
@@ -17,9 +24,50 @@ class CustomBuildExtension(BuildExtension):
                 ext.extra_compile_args["cxx"] += ext.extra_compile_args["gcc"]
         super().build_extensions()
 
+
+def get_sm_targets() -> list[str]:
+    nvcc_path = os.path.join(CUDA_HOME, "bin/nvcc") if CUDA_HOME else "nvcc"
+    try:
+        nvcc_output = subprocess.check_output([nvcc_path, "--version"]).decode()
+        match = re.search(r"release (\d+\.\d+), V(\d+\.\d+\.\d+)", nvcc_output)
+        if match:
+            nvcc_version = match.group(2)
+        else:
+            raise Exception("nvcc version not found")
+        print(f"Found nvcc version: {nvcc_version}")
+    except:
+        raise Exception("nvcc not found")
+
+    support_sm120 = packaging_version.parse(nvcc_version) >= packaging_version.parse("12.8")
+
+    install_mode = os.getenv("NUNCHAKU_INSTALL_MODE", "FAST")
+    if install_mode == "FAST":
+        ret = []
+        for i in range(torch.cuda.device_count()):
+            capability = torch.cuda.get_device_capability(i)
+            sm = f"{capability[0]}{capability[1]}"
+            if sm == "120" and support_sm120:
+                sm = "120a"
+            assert sm in ["75", "80", "86", "89", "120a"], f"Unsupported SM {sm}"
+            if sm not in ret:
+                ret.append(sm)
+    else:
+        assert install_mode == "ALL"
+        ret = ["75", "80", "86", "89"]
+        if support_sm120:
+            ret.append("120a")
+    return ret
+
+
 if __name__ == "__main__":
     fp = open("nunchaku/__version__.py", "r").read()
     version = eval(fp.strip().split()[-1])
+
+    torch_version = torch.__version__.split("+")[0]
+    torch_major_minor_version = ".".join(torch_version.split(".")[:2])
+    if "dev" in version:
+        version = version + date.today().strftime("%Y%m%d")  # data
+    version = version + "+torch" + torch_major_minor_version
 
     ROOT_DIR = os.path.dirname(__file__)
 
@@ -32,7 +80,7 @@ if __name__ == "__main__":
         "third_party/Block-Sparse-Attention/csrc/block_sparse_attn",
     ]
 
-    INCLUDE_DIRS = [ROOT_DIR + "/" + dir for dir in INCLUDE_DIRS]
+    INCLUDE_DIRS = [os.path.join(ROOT_DIR, dir) for dir in INCLUDE_DIRS]
 
     DEBUG = False
 
@@ -48,13 +96,16 @@ if __name__ == "__main__":
         else:
             return []
 
+    sm_targets = get_sm_targets()
+    print(f"Detected SM targets: {sm_targets}", file=sys.stderr)
+
+    assert len(sm_targets) > 0, "No SM targets found"
+
     GCC_FLAGS = ["-DENABLE_BF16=1", "-DBUILD_NUNCHAKU=1", "-fvisibility=hidden", "-g", "-std=c++20", "-UNDEBUG", "-Og"]
-    MSVC_FLAGS = ["/DENABLE_BF16=1", "/DBUILD_NUNCHAKU=1", "/std:c++20", "/UNDEBUG", "/Zc:__cplusplus"]
+    MSVC_FLAGS = ["/DENABLE_BF16=1", "/DBUILD_NUNCHAKU=1", "/std:c++20", "/UNDEBUG", "/Zc:__cplusplus", "/FS"]
     NVCC_FLAGS = [
         "-DENABLE_BF16=1",
         "-DBUILD_NUNCHAKU=1",
-        "-gencode", "arch=compute_86,code=sm_86",
-        "-gencode", "arch=compute_89,code=sm_89",
         "-g",
         "-std=c++20",
         "-UNDEBUG",
@@ -69,16 +120,19 @@ if __name__ == "__main__":
         "-U__CUDA_NO_BFLOAT16_CONVERSIONS__",
         "-U__CUDA_NO_BFLOAT162_OPERATORS__",
         "-U__CUDA_NO_BFLOAT162_CONVERSIONS__",
-        "--threads=2",
+        f"--threads={len(sm_targets)}",
         "--expt-relaxed-constexpr",
         "--expt-extended-lambda",
-        "--generate-line-info",
         "--ptxas-options=--allow-expensive-optimizations=true",
     ]
-    # https://github.com/NVIDIA/cutlass/pull/1479#issuecomment-2052300487
-    NVCC_MSVC_FLAGS = [
-        "-Xcompiler", "/Zc:__cplusplus"
-    ]
+
+    if os.getenv("NUNCHAKU_BUILD_WHEELS", "0") == "0":
+        NVCC_FLAGS.append("--generate-line-info")
+
+    for target in sm_targets:
+        NVCC_FLAGS += ["-gencode", f"arch=compute_{target},code=sm_{target}"]
+
+    NVCC_MSVC_FLAGS = ["-Xcompiler", "/Zc:__cplusplus", "-Xcompiler", "/FS", "-Xcompiler", "/bigobj"]
 
     nunchaku_extension = CUDAExtension(
         name="nunchaku._C",
@@ -91,24 +145,35 @@ if __name__ == "__main__":
             *ncond("src/FluxModel.cpp"),
             *ncond("src/SanaModel.cpp"),
             "src/Serialization.cpp",
+            "src/Module.cpp",
             *ncond("third_party/Block-Sparse-Attention/csrc/block_sparse_attn/src/flash_fwd_hdim64_fp16_sm80.cu"),
             *ncond("third_party/Block-Sparse-Attention/csrc/block_sparse_attn/src/flash_fwd_hdim64_bf16_sm80.cu"),
             *ncond("third_party/Block-Sparse-Attention/csrc/block_sparse_attn/src/flash_fwd_hdim128_fp16_sm80.cu"),
             *ncond("third_party/Block-Sparse-Attention/csrc/block_sparse_attn/src/flash_fwd_hdim128_bf16_sm80.cu"),
             *ncond("third_party/Block-Sparse-Attention/csrc/block_sparse_attn/src/flash_fwd_block_hdim64_fp16_sm80.cu"),
             *ncond("third_party/Block-Sparse-Attention/csrc/block_sparse_attn/src/flash_fwd_block_hdim64_bf16_sm80.cu"),
-            *ncond("third_party/Block-Sparse-Attention/csrc/block_sparse_attn/src/flash_fwd_block_hdim128_fp16_sm80.cu"),
-            *ncond("third_party/Block-Sparse-Attention/csrc/block_sparse_attn/src/flash_fwd_block_hdim128_bf16_sm80.cu"),
+            *ncond(
+                "third_party/Block-Sparse-Attention/csrc/block_sparse_attn/src/flash_fwd_block_hdim128_fp16_sm80.cu"
+            ),
+            *ncond(
+                "third_party/Block-Sparse-Attention/csrc/block_sparse_attn/src/flash_fwd_block_hdim128_bf16_sm80.cu"
+            ),
             "src/kernels/activation_kernels.cu",
             "src/kernels/layernorm_kernels.cu",
             "src/kernels/misc_kernels.cu",
             "src/kernels/zgemm/gemm_w4a4.cu",
-            "src/kernels/zgemm/gemm_w4a4_launch_fp16.cu",
-            "src/kernels/zgemm/gemm_w4a4_launch_bf16.cu",
+            "src/kernels/zgemm/gemm_w4a4_test.cu",
+            "src/kernels/zgemm/gemm_w4a4_launch_fp16_int4.cu",
+            "src/kernels/zgemm/gemm_w4a4_launch_fp16_int4_fasteri2f.cu",
+            "src/kernels/zgemm/gemm_w4a4_launch_fp16_fp4.cu",
+            "src/kernels/zgemm/gemm_w4a4_launch_bf16_int4.cu",
+            "src/kernels/zgemm/gemm_w4a4_launch_bf16_fp4.cu",
             "src/kernels/zgemm/gemm_w8a8.cu",
+            "src/kernels/zgemm/attention.cu",
             "src/kernels/dwconv.cu",
             "src/kernels/gemm_batched.cu",
             "src/kernels/gemm_f16.cu",
+            "src/kernels/awq/gemm_awq.cu",
             "src/kernels/awq/gemv_awq.cu",
             *ncond("third_party/Block-Sparse-Attention/csrc/block_sparse_attn/flash_api.cpp"),
             *ncond("third_party/Block-Sparse-Attention/csrc/block_sparse_attn/flash_api_adapter.cpp"),
