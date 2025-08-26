@@ -1,5 +1,5 @@
-from diffusers import FluxPipeline, SanaPAGPipeline
 import torch
+from diffusers import FluxPipeline, SanaPAGPipeline
 from peft.tuners import lora
 
 from entrypoint.openai.log import setup_logging
@@ -8,6 +8,7 @@ from nunchaku.models.transformer_flux import NunchakuFluxTransformer2dModel
 from nunchaku.models.transformer_sana import NunchakuSanaTransformer2DModel
 
 logger = setup_logging()
+
 
 def get_pipeline(
     model_name: str,
@@ -18,7 +19,9 @@ def get_pipeline(
     device: str | torch.device = "cuda",
     pipeline_init_kwargs: dict = {},
 ) -> FluxPipeline:
-    logger.info(f"Loading model {model_name} with precision {precision}, use_qencoder={use_qencoder}, lora_name={lora_name}, lora_weight={lora_weight}, device={device}")
+    logger.info(
+        f"Loading model {model_name} with precision {precision}, use_qencoder={use_qencoder}, lora_name={lora_name}, lora_weight={lora_weight}, device={device}"
+    )
     if model_name == "schnell":
         if precision == "int4":
             assert torch.device(device).type == "cuda", "int4 only supported on CUDA devices"
@@ -75,7 +78,9 @@ def get_pipeline(
     elif model_name == "sana":
         if precision == "int4":
             assert torch.device(device).type == "cuda", "int4 only supported on CUDA devices"
-            transformer = NunchakuSanaTransformer2DModel.from_pretrained("mit-han-lab/svdq-int4-sana-1600m", pag_layers=8)
+            transformer = NunchakuSanaTransformer2DModel.from_pretrained(
+                "mit-han-lab/svdq-int4-sana-1600m", pag_layers=8
+            )
 
             pipeline_init_kwargs["transformer"] = transformer
             if use_qencoder:
@@ -87,7 +92,7 @@ def get_pipeline(
             variant="bf16",
             torch_dtype=torch.bfloat16,
             pag_applied_layers="transformer_blocks.8",
-            **pipeline_init_kwargs
+            **pipeline_init_kwargs,
         )
         if precision == "int4":
             pipeline._set_pag_attn_processor = lambda *args, **kwargs: None

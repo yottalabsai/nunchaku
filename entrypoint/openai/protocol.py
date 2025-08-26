@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 
+
 ########################### request ########################
 class CreateImageRequest(BaseModel):
     prompt: str
@@ -13,9 +14,10 @@ class CreateImageRequest(BaseModel):
     # sana
     pag_scale: float = 2.0
 
+
 #### saas request ####
 class ObjectCreateRequest(BaseModel):
-    bucketName: str    
+    bucketName: str
     storageSource: str
     objectName: str
 
@@ -28,20 +30,24 @@ class ImageResponse(BaseModel):
     url: str
     latency: float
     is_safe_prompt: bool
-    
+
+
 class BaseResponse(BaseModel):
     code: int
     message: str
     data: list[ImageResponse]
 
+
 class ModelStatus(BaseModel):
     status: str
     model: str
-    
+
+
 class HealthCheckResponse(BaseModel):
     code: int
     message: str
     data: ModelStatus
+
 
 ########################### response ########################
 
@@ -52,13 +58,17 @@ class GreenfieldConfig(BaseModel):
     apikey: str
     url: str
 
+
 class S3Config(BaseModel):
     bucket: str
     prefix_path: str
     aws_access_key_id: str
     aws_secret_access_key: str
 
+
 class Config(BaseModel):
     greenfield: GreenfieldConfig
     s3: S3Config
+
+
 ########################### config ########################

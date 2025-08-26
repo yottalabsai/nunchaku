@@ -1,43 +1,44 @@
 import asyncio
-from io import BytesIO
 import json
 import os
 import resource
 import signal
 import sys
 import tempfile
+import time
+import uuid
 from argparse import ArgumentParser, Namespace
 from contextlib import asynccontextmanager
 from http import HTTPStatus
-import time
+from io import BytesIO
 from typing import Any, Optional
-import uuid
 
 import psutil
+import s3_util
+import saas_util
+import torch
 import uvicorn
 import uvloop
+from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
-import torch
 from protocol import (
     BaseResponse,
+    Config,
     CreateImageRequest,
+    GreenfieldConfig,
     HealthCheckResponse,
     ImageResponse,
     ModelStatus,
-    Config,
     S3Config,
-    GreenfieldConfig,
 )
+
 from entrypoint import load_pipeline
 from entrypoint.openai.log import setup_logging
-from entrypoint.vars import PROMPT_TEMPLATES, MODEL_MAPPINGS
+from entrypoint.vars import MODEL_MAPPINGS, PROMPT_TEMPLATES
 from nunchaku.models.safety_checker import SafetyChecker
-import s3_util  
-import saas_util
-from dotenv import load_dotenv
 
 VERSION = "1.0.0"
 TIMEOUT_KEEP_ALIVE = 180  # seconds
@@ -49,17 +50,19 @@ logger = setup_logging()
 
 router = APIRouter()
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
         logger.info("start server")
         yield
-        
+
     finally:
         # Ensure app state including engine ref is gc'd
         torch.cuda.empty_cache()
         logger.info("stop server empty cuda")
         del app.state
+
 
 @router.get("/health")
 async def health(raw_request: Request) -> Response:
@@ -70,10 +73,12 @@ async def health(raw_request: Request) -> Response:
     logger.info(f"Health check response {result.model_dump()}")
     return JSONResponse(content=result.model_dump(), status_code=HTTPStatus.OK)
 
+
 @router.get("/version")
 async def show_version():
     version = {"version": VERSION}
     return JSONResponse(content=version)
+
 
 @router.api_route("/v1/images/generations", methods=["GET", "POST"])
 async def imagesGenerations(req: CreateImageRequest, raw_req: Request) -> Response:
@@ -92,7 +97,7 @@ async def imagesGenerations(req: CreateImageRequest, raw_req: Request) -> Respon
         end_time = time.time()
         latency = end_time - start_time
         logger.info(f"start_time: {start_time}, end_time: {end_time}, latency: {latency}")
-        
+
         image_bytes = BytesIO()
         image.save(image_bytes, format="PNG")
         image_bytes.seek(0)
@@ -101,7 +106,7 @@ async def imagesGenerations(req: CreateImageRequest, raw_req: Request) -> Respon
         greenfield_bytes.seek(0)
     except Exception as e:
         logger.exception("imagesGenerations failed")
-        result = BaseResponse(code=10001, message="failed to generation image", data=[])    
+        result = BaseResponse(code=10001, message="failed to generation image", data=[])
         return JSONResponse(content=result.model_dump(), status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
     finally:
         del image
@@ -115,10 +120,13 @@ async def imagesGenerations(req: CreateImageRequest, raw_req: Request) -> Respon
     if url is not None:
         image_response = ImageResponse(url=url, latency=latency, is_safe_prompt=is_safe_prompt)
         result = BaseResponse(code=10000, message="success", data=[image_response])
-        asyncio.create_task(saas_util.upload_fileobj_to_greenfield(greenfield_bytes, object_name, state.config.greenfield))
+        asyncio.create_task(
+            saas_util.upload_fileobj_to_greenfield(greenfield_bytes, object_name, state.config.greenfield)
+        )
     else:
-        result = BaseResponse(code=10001, message="failed to generation image", data=[])    
+        result = BaseResponse(code=10001, message="failed to generation image", data=[])
     return JSONResponse(content=result.model_dump(), status_code=HTTPStatus.OK)
+
 
 def build_app(args: Namespace) -> FastAPI:
     app = FastAPI(lifespan=lifespan)
@@ -139,6 +147,7 @@ def build_app(args: Namespace) -> FastAPI:
 
     return app
 
+
 async def run_server(args, **uvicorn_kwargs) -> None:
     logger.info("nunchaku API server version %s", VERSION)
     logger.info("args: %s", args)
@@ -153,7 +162,9 @@ async def run_server(args, **uvicorn_kwargs) -> None:
 
     signal.signal(signal.SIGTERM, signal_handler)
     app = build_app(args)
-    pipeline = load_pipeline.get_pipeline(args.model, args.precision, args.use_qencoder, args.lora_name, args.lora_weight)
+    pipeline = load_pipeline.get_pipeline(
+        args.model, args.precision, args.use_qencoder, args.lora_name, args.lora_weight
+    )
     logger.info("Loaded pipeline")
     init_app_state(app.state, pipeline, args)
     logger.info("Initialized app state")
@@ -167,6 +178,7 @@ async def run_server(args, **uvicorn_kwargs) -> None:
     # NB: Await server shutdown only after the backend context is exited
     await shutdown_task
 
+
 async def serve_http(app: FastAPI, **uvicorn_kwargs: Any):
     logger.info("Available routes are:")
     for route in app.routes:
@@ -176,7 +188,7 @@ async def serve_http(app: FastAPI, **uvicorn_kwargs: Any):
         if methods is None or path is None:
             continue
 
-        logger.info("Route: %s, Methods: %s", path, ', '.join(methods))
+        logger.info("Route: %s, Methods: %s", path, ", ".join(methods))
 
     config = uvicorn.Config(app, **uvicorn_kwargs)
     server = uvicorn.Server(config)
@@ -204,10 +216,11 @@ async def serve_http(app: FastAPI, **uvicorn_kwargs: Any):
         process = find_process_using_port(port)
         if process is not None:
             logger.debug(
-                "port %s is used by process %s launched with command:\n%s",
-                port, process, " ".join(process.cmdline()))
+                "port %s is used by process %s launched with command:\n%s", port, process, " ".join(process.cmdline())
+            )
         logger.info("Shutting down FastAPI HTTP server.")
         return server.shutdown()
+
 
 def find_process_using_port(port: int) -> Optional[psutil.Process]:
     # TODO: We can not check for running processes with network
@@ -231,8 +244,7 @@ def _add_shutdown_handlers(app: FastAPI, server: uvicorn.Server) -> None:
 
     @app.exception_handler(RuntimeError)
     async def runtime_error_handler(request: Request, __):
-        logger.fatal("RuntimeError, terminating server "
-                         "process")
+        logger.fatal("RuntimeError, terminating server " "process")
         server.should_exit = True
         return Response(status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
 
@@ -244,14 +256,17 @@ def set_ulimit(target_soft_limit=65535):
 
     if current_soft < target_soft_limit:
         try:
-            resource.setrlimit(resource_type,
-                               (target_soft_limit, current_hard))
+            resource.setrlimit(resource_type, (target_soft_limit, current_hard))
         except ValueError as e:
             logger.warning(
                 "Found ulimit of %s and failed to automatically increase"
                 "with error %s. This can cause fd limit errors like"
                 "`OSError: [Errno 24] Too many open files`. Consider "
-                "increasing with ulimit -n", current_soft, e)
+                "increasing with ulimit -n",
+                current_soft,
+                e,
+            )
+
 
 def generate_image(req: CreateImageRequest, raw_req: Request, prompt: str):
     state = raw_req.app.state
@@ -263,7 +278,9 @@ def generate_image(req: CreateImageRequest, raw_req: Request, prompt: str):
     if model in ["schnell", "dev"]:
         lora_name = state.lora_name
         prompt = PROMPT_TEMPLATES[lora_name].format(prompt=prompt)
-        logger.info(f"generate_image: model={model}, prompt={prompt}, height={height}, width={width}, num_inference_steps={req.num_inference_steps}, guidance_scale={req.guidance_scale} seed={req.seed}")
+        logger.info(
+            f"generate_image: model={model}, prompt={prompt}, height={height}, width={width}, num_inference_steps={req.num_inference_steps}, guidance_scale={req.guidance_scale} seed={req.seed}"
+        )
         image = pipeline(
             prompt=prompt,
             height=height,
@@ -273,7 +290,9 @@ def generate_image(req: CreateImageRequest, raw_req: Request, prompt: str):
             generator=torch.Generator().manual_seed(req.seed),
         ).images[0]
     elif model in ["sana"]:
-        logger.info(f"generate_image: model={model}, prompt={prompt}, height={height}, width={width}, guidance_scale={req.guidance_scale}, pag_scale={pag_scale}, num_inference_steps={req.num_inference_steps}, seed={req.seed}")
+        logger.info(
+            f"generate_image: model={model}, prompt={prompt}, height={height}, width={width}, guidance_scale={req.guidance_scale}, pag_scale={pag_scale}, num_inference_steps={req.num_inference_steps}, seed={req.seed}"
+        )
         image = pipeline(
             prompt=prompt,
             height=height,
@@ -284,6 +303,7 @@ def generate_image(req: CreateImageRequest, raw_req: Request, prompt: str):
             generator=torch.Generator().manual_seed(req.seed),
         ).images[0]
     return image
+
 
 def read_config():
     load_dotenv()
@@ -310,7 +330,7 @@ def read_config():
         raise ValueError("SAAS_GREENFIELD_APIKEY environment variable must be set and not empty.")
     if not greenfield_url:
         raise ValueError("SAAS_GREENFIELD_URL environment variable must be set and not empty.")
-    
+
     s3 = S3Config(
         bucket=bucket,
         prefix_path=prefix_path,
@@ -326,6 +346,7 @@ def read_config():
     config = Config(s3=s3, greenfield=greenfield)
     return config
 
+
 def init_app_state(app_state, pipeline, args):
     app_state.model = args.model
     app_state.precision = args.precision
@@ -340,6 +361,7 @@ def init_app_state(app_state, pipeline, args):
     app_state.safety_checker = SafetyChecker("cuda", disabled=args.no_safety_checker)
     logger.info("end init safety checker")
 
+
 def mark_args(parser: ArgumentParser) -> None:
     parser.add_argument(
         "-m", "--model", type=str, default="schnell", choices=["schnell", "dev", "sana"], help="Which model to use"
@@ -353,7 +375,11 @@ def mark_args(parser: ArgumentParser) -> None:
         help="Which precisions to use",
     )
     parser.add_argument("--use-qencoder", action="store_true", help="Whether to use 4-bit text encoder", default=False)
-    parser.add_argument("--lora-name", default="None", choices=["None", "All", "Anime", "GHIBSKY Illustration", "Realism", "Yarn Art", "Children Sketch"])
+    parser.add_argument(
+        "--lora-name",
+        default="None",
+        choices=["None", "All", "Anime", "GHIBSKY Illustration", "Realism", "Yarn Art", "Children Sketch"],
+    )
     parser.add_argument("--lora-weight", type=float, default=1.0)
     parser.add_argument("--no-safety-checker", action="store_true", help="Disable safety checker", default=False)
 
