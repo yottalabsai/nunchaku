@@ -120,9 +120,7 @@ async def imagesGenerations(req: CreateImageRequest, raw_req: Request) -> Respon
     if url is not None:
         image_response = ImageResponse(url=url, latency=latency, is_safe_prompt=is_safe_prompt)
         result = BaseResponse(code=10000, message="success", data=[image_response])
-        asyncio.create_task(
-            saas_util.upload_fileobj_to_greenfield(greenfield_bytes, object_name, state.config.greenfield)
-        )
+        asyncio.create_task(saas_util.upload_fileobj_to_walrus(greenfield_bytes, object_name, state.config.greenfield))
     else:
         result = BaseResponse(code=10001, message="failed to generation image", data=[])
     return JSONResponse(content=result.model_dump(), status_code=HTTPStatus.OK)
