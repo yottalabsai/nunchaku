@@ -1,10 +1,13 @@
 #!/bin/bash
 
-source ~/miniconda3/bin/activate image
+# Activate the Conda environment
+# The source command is necessary to apply the environment changes to the current shell.
+source /opt/conda/bin/activate image
 
 # huggingface-cli login
 if [ -n "$HUGGINGFACE_TOKEN" ]; then
-    huggingface-cli login --token $HUGGINGFACE_TOKEN
+    hf auth login --token $HUGGINGFACE_TOKEN
 fi
 
-exec python entrypoint/openai/api_server.py "$@"
+
+exec "$@"

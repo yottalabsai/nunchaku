@@ -2,11 +2,10 @@ import logging
 
 import boto3
 from botocore.exceptions import ClientError
-from log import setup_logging
 
 from entrypoint.openai.protocol import S3Config
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
 
 def get_s3_client(config: S3Config):
@@ -38,7 +37,7 @@ def upload_file_and_get_presigned_url(s3_client, bucket, object_name, file):
             logger.info(f"Presigned URL: {response_url}")
             return response_url
         else:
-            logger.info(f"Presigned URL failed")
+            logger.info("Presigned URL failed")
             return None
     except Exception as e:
         logger.error(f"Error uploading file {object_name}: {e}")
