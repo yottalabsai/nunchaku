@@ -33,6 +33,7 @@ def get_args() -> argparse.Namespace:
     )
     parser.add_argument("--use-qencoder", action="store_true", help="Whether to use 4-bit text encoder")
     parser.add_argument("--no-safety-checker", action="store_true", help="Disable safety checker")
+    parser.add_argument("--no-cpu-offload", action="store_true", help="Keep BF16 pipeline on GPU instead of CPU offload")
     parser.add_argument("--count-use", action="store_true", help="Whether to count the number of uses")
     parser.add_argument("--gradio-root-path", type=str, default="")
     return parser.parse_args()
@@ -51,6 +52,7 @@ for i, precision in enumerate(args.precisions):
         device="cuda",
         lora_name="All",
         pipeline_init_kwargs={**pipeline_init_kwargs},
+        cpu_offload=not args.no_cpu_offload,
     )
     pipeline.cur_lora_name = "None"
     pipeline.cur_lora_weight = 0

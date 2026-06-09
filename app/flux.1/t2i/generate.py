@@ -22,6 +22,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("-o", "--output-path", type=str, default="output.png", help="Image output path")
     parser.add_argument("-g", "--guidance-scale", type=float, default=0, help="Guidance scale.")
     parser.add_argument("--use-qencoder", action="store_true", help="Whether to use 4-bit text encoder")
+    parser.add_argument("--no-cpu-offload", action="store_true", help="Keep BF16 pipeline on GPU instead of CPU offload")
     known_args, _ = parser.parse_known_args()
 
     if known_args.model == "dev":
@@ -48,6 +49,7 @@ def main():
         lora_name=getattr(args, "lora_name", "None"),
         lora_weight=getattr(args, "lora_weight", 1),
         device="cuda",
+        cpu_offload=not args.no_cpu_offload,
     )
 
     if args.model == "dev":

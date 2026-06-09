@@ -41,6 +41,7 @@ def get_args():
     parser.add_argument(
         "--max-dataset-size", type=int, default=5000, help="Maximum number of images to generate for each dataset"
     )
+    parser.add_argument("--no-cpu-offload", action="store_true", help="Keep BF16 pipeline on GPU instead of CPU offload")
     known_args, _ = parser.parse_known_args()
 
     if known_args.model == "dev":
@@ -54,7 +55,9 @@ def main():
     assert args.chunk_step > 0
     assert 0 <= args.chunk_start < args.chunk_step
 
-    pipeline = get_pipeline(model_name=args.model, precision=args.precision, device="cuda")
+    pipeline = get_pipeline(
+        model_name=args.model, precision=args.precision, device="cuda", cpu_offload=not args.no_cpu_offload
+    )
     pipeline.set_progress_bar_config(desc="Sampling", leave=False, dynamic_ncols=True, position=1)
 
     output_root = args.output_root

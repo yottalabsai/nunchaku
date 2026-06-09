@@ -32,6 +32,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument(
         "--ignore_ratio", type=float, default=0.2, help="Ignored ratio of the slowest and fastest steps"
     )
+    parser.add_argument("--no-cpu-offload", action="store_true", help="Keep BF16 pipeline on GPU instead of CPU offload")
     known_args, _ = parser.parse_known_args()
 
     if known_args.model == "dev":
@@ -42,7 +43,9 @@ def get_args() -> argparse.Namespace:
 
 def main():
     args = get_args()
-    pipeline = get_pipeline(model_name=args.model, precision=args.precision, device="cuda")
+    pipeline = get_pipeline(
+        model_name=args.model, precision=args.precision, device="cuda", cpu_offload=not args.no_cpu_offload
+    )
 
     dummy_prompt = "A cat holding a sign that says hello world"
 
