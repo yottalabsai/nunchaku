@@ -413,6 +413,7 @@ def mark_args(parser: ArgumentParser) -> None:
         "--use-fp16-attention", action="store_true", help="Whether to use nunchaku fp16 attention", default=False
     )
     parser.add_argument("--use-qencoder", action="store_true", help="Whether to use 4-bit text encoder")
+    parser.add_argument("--no-cpu-offload", action="store_true", help="Keep BF16 pipeline on GPU instead of CPU offload")
     parser.add_argument("--no-safety-checker", action="store_true", help="Disable safety checker")
     parser.add_argument("--count-use", action="store_true", help="Whether to count the number of uses")
     parser.add_argument(

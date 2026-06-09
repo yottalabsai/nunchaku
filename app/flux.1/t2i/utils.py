@@ -33,6 +33,7 @@ def get_pipeline(
     lora_weight: float = 1,
     device: str | torch.device = "cuda",
     pipeline_init_kwargs: dict = {},
+    cpu_offload: bool = True,
 ) -> FluxPipeline:
     if model_name == "schnell":
         if precision in ["int4", "fp4"]:
@@ -115,7 +116,7 @@ def get_pipeline(
                             m.scaling[name] = lora_weight
     else:
         raise NotImplementedError(f"Model {model_name} not implemented")
-    if precision == "bf16":
+    if precision == "bf16" and cpu_offload:
         pipeline.enable_model_cpu_offload()
     else:
         pipeline = pipeline.to(device)

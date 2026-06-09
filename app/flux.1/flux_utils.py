@@ -22,6 +22,7 @@ def get_pipeline(
     lora_name = args.lora_name
     lora_weight = args.lora_weight
     use_fp16_attention = args.use_fp16_attention
+    cpu_offload = not args.no_cpu_offload
     pipeline_init_kwargs: dict = {}
     processor = None
     if model_name in ["schnell", "schnell_v2", "dev"]:
@@ -34,6 +35,7 @@ def get_pipeline(
             lora_weight=lora_weight,
             device="cuda",
             pipeline_init_kwargs=pipeline_init_kwargs,
+            cpu_offload=cpu_offload,
         )
         pipeline.cur_lora_name = "None"
         pipeline.cur_lora_weight = 0
